@@ -1,0 +1,43 @@
+@page "/"
+@using DecoSOP.Services
+@using DecoSOP.Models
+@inject SopService SopService
+@rendermode InteractiveServer
+
+<PageTitle>DecoSOP - Standard Operating Procedures</PageTitle>
+
+<div class="home-container">
+    <h1>Standard Operating Procedures</h1>
+    <p class="lead">Select a document from the sidebar, or browse categories below.</p>
+
+    @if (categories is not null)
+    {
+        <div class="category-grid">
+            @foreach (var category in categories)
+            {
+                <div class="category-card">
+                    <h3>@category.Name</h3>
+                    <ul>
+                        @foreach (var doc in category.Documents)
+                        {
+                            <li><a href="sop/@doc.Id">@doc.Title</a></li>
+                        }
+                    </ul>
+                    @if (category.Documents.Count == 0)
+                    {
+                        <p class="text-muted">No SOPs yet.</p>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<Category>? categories;
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = await SopService.GetCategoriesAsync();
+    }
+}

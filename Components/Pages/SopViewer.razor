@@ -1,0 +1,72 @@
+@page "/sop/{Id:int}"
+@using DecoSOP.Services
+@using DecoSOP.Models
+@using Markdig
+@inject SopService SopService
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(document?.Title ?? "SOP") - DecoSOP</PageTitle>
+
+@if (document is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="sop-viewer">
+        <div class="sop-toolbar">
+            <span class="sop-breadcrumb">@document.Category.Name / @document.Title</span>
+            <div class="sop-actions">
+                <button class="btn btn-sm btn-outline-primary" @onclick="Edit">Edit</button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="ConfirmDelete">Delete</button>
+            </div>
+        </div>
+
+        @if (showDeleteConfirm)
+        {
+            <div class="alert alert-danger d-flex align-items-center gap-2 mt-2">
+                <span>Delete "<strong>@document.Title</strong>"? This cannot be undone.</span>
+                <button class="btn btn-sm btn-danger" @onclick="Delete">Yes, delete</button>
+                <button class="btn btn-sm btn-secondary" @onclick="() => showDeleteConfirm = false">Cancel</button>
+            </div>
+        }
+
+        <div class="sop-content markdown-body">
+            @((MarkupString)renderedHtml)
+        </div>
+
+        <div class="sop-footer text-muted small">
+            Last updated: @document.UpdatedAt.ToLocalTime().ToString("MMMM d, yyyy h:mm tt")
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private SopDocument? document;
+    private string renderedHtml = string.Empty;
+    private bool showDeleteConfirm;
+
+    private static readonly MarkdownPipeline pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        document = await SopService.GetDocumentAsync(Id);
+        if (document is not null)
+            renderedHtml = Markdown.ToHtml(document.MarkdownContent, pipeline);
+    }
+
+    private void Edit() => Nav.NavigateTo($"/sop/{Id}/edit");
+
+    private void ConfirmDelete() => showDeleteConfirm = true;
+
+    private async Task Delete()
+    {
+        await SopService.DeleteDocumentAsync(Id);
+        Nav.NavigateTo("/");
+    }
+}

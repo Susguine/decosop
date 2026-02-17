@@ -1,0 +1,152 @@
+@page "/sop/{Id:int}/edit"
+@page "/sop/new"
+@using DecoSOP.Services
+@using DecoSOP.Models
+@using Markdig
+@inject SopService SopService
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(isNew ? "New SOP" : $"Edit: {title}") - DecoSOP</PageTitle>
+
+<div class="sop-editor">
+    <div class="sop-toolbar">
+        <input type="text" class="form-control form-control-lg sop-title-input"
+               placeholder="SOP Title" @bind="title" />
+        <div class="sop-actions">
+            <button class="btn btn-sm btn-success" @onclick="Save" disabled="@isSaving">
+                @(isSaving ? "Saving..." : "Save")
+            </button>
+            <button class="btn btn-sm btn-secondary" @onclick="Cancel">Cancel</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div class="alert alert-danger mt-2">@error</div>
+    }
+
+    @if (isNew)
+    {
+        <div class="mb-3">
+            <label class="form-label">Category</label>
+            <select class="form-select form-select-sm" style="max-width: 300px;" @bind="selectedCategoryId">
+                @if (categories is not null)
+                {
+                    @foreach (var cat in categories)
+                    {
+                        <option value="@cat.Id">@cat.Name</option>
+                    }
+                }
+            </select>
+        </div>
+    }
+
+    <div class="editor-container">
+        <div class="editor-pane">
+            <div class="pane-header">Markdown</div>
+            <textarea class="editor-textarea" value="@markdownContent"
+                      @oninput="OnContentChanged" placeholder="Write your SOP in Markdown..." />
+        </div>
+        <div class="preview-pane">
+            <div class="pane-header">Preview</div>
+            <div class="preview-content markdown-body">
+                @((MarkupString)previewHtml)
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [SupplyParameterFromQuery] public int? CategoryId { get; set; }
+
+    private string title = string.Empty;
+    private string markdownContent = string.Empty;
+    private string previewHtml = string.Empty;
+    private string error = string.Empty;
+    private bool isSaving;
+    private bool isNew => Id == 0;
+    private List<Category>? categories;
+    private int selectedCategoryId;
+
+    private static readonly MarkdownPipeline pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (isNew)
+        {
+            categories = await SopService.GetCategoriesAsync();
+            selectedCategoryId = CategoryId ?? categories?.FirstOrDefault()?.Id ?? 0;
+        }
+        else
+        {
+            var doc = await SopService.GetDocumentAsync(Id);
+            if (doc is null)
+            {
+                Nav.NavigateTo("/");
+                return;
+            }
+            title = doc.Title;
+            markdownContent = doc.MarkdownContent;
+            UpdatePreview();
+        }
+    }
+
+    private void OnContentChanged(ChangeEventArgs e)
+    {
+        markdownContent = e.Value?.ToString() ?? string.Empty;
+        UpdatePreview();
+    }
+
+    private void UpdatePreview()
+    {
+        previewHtml = Markdown.ToHtml(markdownContent, pipeline);
+    }
+
+    private async Task Save()
+    {
+        error = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            error = "Title is required.";
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            if (isNew)
+            {
+                var doc = await SopService.CreateDocumentAsync(selectedCategoryId, title);
+                await SopService.UpdateDocumentAsync(doc.Id, title, markdownContent);
+                Nav.NavigateTo($"/sop/{doc.Id}");
+            }
+            else
+            {
+                await SopService.UpdateDocumentAsync(Id, title, markdownContent);
+                Nav.NavigateTo($"/sop/{Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        if (isNew)
+            Nav.NavigateTo("/");
+        else
+            Nav.NavigateTo($"/sop/{Id}");
+    }
+}

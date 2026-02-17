@@ -1,0 +1,140 @@
+@using DecoSOP.Services
+@using DecoSOP.Models
+@inject SopService SopService
+@inject NavigationManager Nav
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">DecoSOP</a>
+    </div>
+</div>
+
+<div class="sidebar-content">
+    <div class="sidebar-search px-3 py-2">
+        <input type="text" class="form-control form-control-sm" placeholder="Search SOPs..."
+               @bind="searchQuery" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+    </div>
+
+    @if (isSearching)
+    {
+        <div class="nav-section px-3 py-1">
+            <span class="nav-section-title">Search Results</span>
+        </div>
+        @foreach (var doc in searchResults)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="@($"sop/{doc.Id}")">
+                    @doc.Title
+                    <span class="nav-category-hint">@doc.Category.Name</span>
+                </NavLink>
+            </div>
+        }
+        @if (searchResults.Count == 0)
+        {
+            <div class="px-3 py-2 text-muted small">No results found.</div>
+        }
+    }
+    else
+    {
+        <nav class="nav flex-column">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    Home
+                </NavLink>
+            </div>
+
+            @if (categories is not null)
+            {
+                @foreach (var category in categories)
+                {
+                    <div class="nav-section px-3 py-1">
+                        <button class="nav-section-toggle" @onclick="() => ToggleCategory(category.Id)">
+                            <span class="toggle-icon">@(IsExpanded(category.Id) ? "v" : ">")</span>
+                            <span class="nav-section-title">@category.Name</span>
+                            <span class="nav-section-count">@category.Documents.Count</span>
+                        </button>
+                    </div>
+
+                    @if (IsExpanded(category.Id))
+                    {
+                        @foreach (var doc in category.Documents)
+                        {
+                            <div class="nav-item px-3 ps-4">
+                                <NavLink class="nav-link" href="@($"sop/{doc.Id}")">
+                                    @doc.Title
+                                </NavLink>
+                            </div>
+                        }
+
+                        <div class="nav-item px-3 ps-4">
+                            <NavLink class="nav-link nav-link-new" href="@($"sop/new?categoryId={category.Id}")">
+                                + New SOP
+                            </NavLink>
+                        </div>
+                    }
+                }
+            }
+        </nav>
+    }
+</div>
+
+@code {
+    private List<Category>? categories;
+    private HashSet<int> expandedCategories = [];
+    private string searchQuery = string.Empty;
+    private List<SopDocument> searchResults = [];
+    private bool isSearching => !string.IsNullOrWhiteSpace(searchQuery);
+    private System.Timers.Timer? debounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategories();
+    }
+
+    public async Task LoadCategories()
+    {
+        categories = await SopService.GetCategoriesAsync();
+
+        // Expand all categories by default
+        if (expandedCategories.Count == 0 && categories is not null)
+        {
+            foreach (var c in categories)
+                expandedCategories.Add(c.Id);
+        }
+
+        StateHasChanged();
+    }
+
+    private bool IsExpanded(int categoryId) => expandedCategories.Contains(categoryId);
+
+    private void ToggleCategory(int categoryId)
+    {
+        if (!expandedCategories.Remove(categoryId))
+            expandedCategories.Add(categoryId);
+    }
+
+    private async Task OnSearchKeyUp()
+    {
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            searchResults = [];
+            return;
+        }
+
+        debounceTimer = new System.Timers.Timer(300);
+        debounceTimer.Elapsed += async (_, _) =>
+        {
+            debounceTimer?.Stop();
+            await InvokeAsync(async () =>
+            {
+                searchResults = await SopService.SearchAsync(searchQuery);
+                StateHasChanged();
+            });
+        };
+        debounceTimer.AutoReset = false;
+        debounceTimer.Start();
+    }
+}
