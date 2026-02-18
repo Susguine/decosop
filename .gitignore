@@ -57,5 +57,8 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 
+## Publish output
+publish/
+
 ## Claude
 CLAUDE.md
