@@ -12,16 +12,33 @@ public class SopService
 
     // --- Categories ---
 
-    public async Task<List<Category>> GetCategoriesAsync()
-        => await _db.Categories
+    /// <summary>
+    /// Returns the full category tree (roots with nested children) with documents at each level.
+    /// </summary>
+    public async Task<List<Category>> GetCategoryTreeAsync()
+    {
+        // Load all categories and documents in one query; EF Core fixes up navigation properties
+        var all = await _db.Categories
             .Include(c => c.Documents.OrderBy(d => d.SortOrder))
             .OrderBy(c => c.SortOrder)
             .ToListAsync();
 
-    public async Task<Category> CreateCategoryAsync(string name)
+        // Return only root categories (ParentId == null); children are already wired via EF fixup
+        return all.Where(c => c.ParentId == null).ToList();
+    }
+
+    /// <summary>
+    /// Returns a flat list of all categories (for dropdowns).
+    /// </summary>
+    public async Task<List<Category>> GetAllCategoriesAsync()
+        => await _db.Categories.OrderBy(c => c.SortOrder).ToListAsync();
+
+    public async Task<Category> CreateCategoryAsync(string name, int? parentId = null)
     {
-        var maxSort = await _db.Categories.MaxAsync(c => (int?)c.SortOrder) ?? -1;
-        var category = new Category { Name = name.Trim(), SortOrder = maxSort + 1 };
+        var maxSort = await _db.Categories
+            .Where(c => c.ParentId == parentId)
+            .MaxAsync(c => (int?)c.SortOrder) ?? -1;
+        var category = new Category { Name = name.Trim(), SortOrder = maxSort + 1, ParentId = parentId };
         _db.Categories.Add(category);
         await _db.SaveChangesAsync();
         return category;
@@ -43,6 +60,52 @@ public class SopService
         await _db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Builds "Parent > Child > Grandchild" breadcrumb path for a category.
+    /// </summary>
+    public async Task<string> GetCategoryPathAsync(int categoryId)
+    {
+        var all = await _db.Categories.AsNoTracking().ToListAsync();
+        var parts = new List<string>();
+        var current = all.FirstOrDefault(c => c.Id == categoryId);
+        while (current is not null)
+        {
+            parts.Insert(0, current.Name);
+            current = current.ParentId.HasValue ? all.FirstOrDefault(c => c.Id == current.ParentId) : null;
+        }
+        return string.Join(" / ", parts);
+    }
+
+    /// <summary>
+    /// Returns a single category with its direct children and documents loaded.
+    /// </summary>
+    public async Task<Category?> GetCategoryWithChildrenAsync(int categoryId)
+    {
+        // Load all categories + documents so EF fixup wires Children navigations
+        var all = await _db.Categories
+            .Include(c => c.Documents.OrderBy(d => d.SortOrder))
+            .OrderBy(c => c.SortOrder)
+            .ToListAsync();
+
+        return all.FirstOrDefault(c => c.Id == categoryId);
+    }
+
+    /// <summary>
+    /// Returns breadcrumb list of (Id, Name) from root down to the given category.
+    /// </summary>
+    public async Task<List<(int Id, string Name)>> GetCategoryBreadcrumbsAsync(int categoryId)
+    {
+        var all = await _db.Categories.AsNoTracking().ToListAsync();
+        var crumbs = new List<(int Id, string Name)>();
+        var current = all.FirstOrDefault(c => c.Id == categoryId);
+        while (current is not null)
+        {
+            crumbs.Insert(0, (current.Id, current.Name));
+            current = current.ParentId.HasValue ? all.FirstOrDefault(c => c.Id == current.ParentId) : null;
+        }
+        return crumbs;
+    }
+
     // --- Documents ---
 
     public async Task<SopDocument?> GetDocumentAsync(int id)
@@ -60,7 +123,7 @@ public class SopService
         {
             CategoryId = categoryId,
             Title = title.Trim(),
-            MarkdownContent = $"# {title.Trim()}\n\nStart writing your SOP here...",
+            HtmlContent = $"<h1>{System.Net.WebUtility.HtmlEncode(title.Trim())}</h1><p>Start writing your SOP here...</p>",
             SortOrder = maxSort + 1
         };
 
@@ -69,12 +132,12 @@ public class SopService
         return doc;
     }
 
-    public async Task UpdateDocumentAsync(int id, string title, string markdownContent)
+    public async Task UpdateDocumentAsync(int id, string title, string htmlContent)
     {
         var doc = await _db.Documents.FindAsync(id);
         if (doc is null) return;
         doc.Title = title.Trim();
-        doc.MarkdownContent = markdownContent;
+        doc.HtmlContent = htmlContent;
         doc.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
     }
@@ -95,9 +158,42 @@ public class SopService
         return await _db.Documents
             .Include(d => d.Category)
             .Where(d => d.Title.ToLower().Contains(term)
-                     || d.MarkdownContent.ToLower().Contains(term))
+                     || d.HtmlContent.ToLower().Contains(term))
             .OrderBy(d => d.Category.SortOrder)
             .ThenBy(d => d.SortOrder)
             .ToListAsync();
     }
+
+    // --- Favorites ---
+
+    public async Task<bool> ToggleCategoryFavoriteAsync(int categoryId)
+    {
+        var cat = await _db.Categories.FindAsync(categoryId);
+        if (cat is null) return false;
+        cat.IsFavorited = !cat.IsFavorited;
+        await _db.SaveChangesAsync();
+        return cat.IsFavorited;
+    }
+
+    public async Task<bool> ToggleDocumentFavoriteAsync(int documentId)
+    {
+        var doc = await _db.Documents.FindAsync(documentId);
+        if (doc is null) return false;
+        doc.IsFavorited = !doc.IsFavorited;
+        await _db.SaveChangesAsync();
+        return doc.IsFavorited;
+    }
+
+    public async Task<List<Category>> GetFavoriteCategoriesAsync()
+        => await _db.Categories
+            .Where(c => c.IsFavorited)
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+
+    public async Task<List<SopDocument>> GetFavoriteDocumentsAsync()
+        => await _db.Documents
+            .Include(d => d.Category)
+            .Where(d => d.IsFavorited)
+            .OrderBy(d => d.Title)
+            .ToListAsync();
 }
