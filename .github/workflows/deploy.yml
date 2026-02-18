@@ -40,6 +40,14 @@ jobs:
           Copy-Item -Path $source -Destination $dest -Recurse -Force -Exclude "decosop.db"
         shell: powershell
 
+      - name: Ensure firewall rule
+        run: |
+          $rule = netsh advfirewall firewall show rule name="DecoSOP" 2>$null
+          if (-not ($rule -match "DecoSOP")) {
+            netsh advfirewall firewall add rule name="DecoSOP" dir=in action=allow protocol=TCP localport=5098
+          }
+        shell: powershell
+
       - name: Start service
         run: |
           $svc = Get-Service -Name "DecoSOP" -ErrorAction SilentlyContinue
