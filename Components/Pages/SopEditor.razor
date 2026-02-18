@@ -2,10 +2,11 @@
 @page "/sop/new"
 @using DecoSOP.Services
 @using DecoSOP.Models
-@using Markdig
 @inject SopService SopService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @rendermode InteractiveServer
+@implements IAsyncDisposable
 
 <PageTitle>@(isNew ? "New SOP" : $"Edit: {title}") - DecoSOP</PageTitle>
 
@@ -30,30 +31,20 @@
     {
         <div class="mb-3">
             <label class="form-label">Category</label>
-            <select class="form-select form-select-sm" style="max-width: 300px;" @bind="selectedCategoryId">
-                @if (categories is not null)
+            <select class="form-select form-select-sm" style="max-width: 500px;" @bind="selectedCategoryId">
+                @if (categoryOptions is not null)
                 {
-                    @foreach (var cat in categories)
+                    @foreach (var opt in categoryOptions)
                     {
-                        <option value="@cat.Id">@cat.Name</option>
+                        <option value="@opt.Id">@opt.Path</option>
                     }
                 }
             </select>
         </div>
     }
 
-    <div class="editor-container">
-        <div class="editor-pane">
-            <div class="pane-header">Markdown</div>
-            <textarea class="editor-textarea" value="@markdownContent"
-                      @oninput="OnContentChanged" placeholder="Write your SOP in Markdown..." />
-        </div>
-        <div class="preview-pane">
-            <div class="pane-header">Preview</div>
-            <div class="preview-content markdown-body">
-                @((MarkupString)previewHtml)
-            </div>
-        </div>
+    <div class="editor-wrapper">
+        <textarea id="jodit-editor"></textarea>
     </div>
 </div>
 
@@ -62,24 +53,34 @@
     [SupplyParameterFromQuery] public int? CategoryId { get; set; }
 
     private string title = string.Empty;
-    private string markdownContent = string.Empty;
-    private string previewHtml = string.Empty;
+    private string initialHtml = string.Empty;
     private string error = string.Empty;
     private bool isSaving;
     private bool isNew => Id == 0;
-    private List<Category>? categories;
+    private bool editorInitialized;
+    private List<(int Id, string Path)>? categoryOptions;
     private int selectedCategoryId;
-
-    private static readonly MarkdownPipeline pipeline = new MarkdownPipelineBuilder()
-        .UseAdvancedExtensions()
-        .Build();
 
     protected override async Task OnParametersSetAsync()
     {
         if (isNew)
         {
-            categories = await SopService.GetCategoriesAsync();
-            selectedCategoryId = CategoryId ?? categories?.FirstOrDefault()?.Id ?? 0;
+            var allCats = await SopService.GetAllCategoriesAsync();
+            // Build path labels for each category
+            var lookup = allCats.ToDictionary(c => c.Id);
+            categoryOptions = allCats.Select(c =>
+            {
+                var parts = new List<string>();
+                var cur = c;
+                while (cur is not null)
+                {
+                    parts.Insert(0, cur.Name);
+                    cur = cur.ParentId.HasValue && lookup.ContainsKey(cur.ParentId.Value) ? lookup[cur.ParentId.Value] : null;
+                }
+                return (c.Id, Path: string.Join(" / ", parts));
+            }).OrderBy(x => x.Path).ToList();
+            selectedCategoryId = CategoryId ?? categoryOptions?.FirstOrDefault().Id ?? 0;
+            initialHtml = "";
         }
         else
         {
@@ -90,20 +91,17 @@
                 return;
             }
             title = doc.Title;
-            markdownContent = doc.MarkdownContent;
-            UpdatePreview();
+            initialHtml = doc.HtmlContent;
         }
     }
 
-    private void OnContentChanged(ChangeEventArgs e)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        markdownContent = e.Value?.ToString() ?? string.Empty;
-        UpdatePreview();
-    }
-
-    private void UpdatePreview()
-    {
-        previewHtml = Markdown.ToHtml(markdownContent, pipeline);
+        if (firstRender && !editorInitialized)
+        {
+            editorInitialized = true;
+            await JS.InvokeVoidAsync("editorInterop.create", "jodit-editor", initialHtml);
+        }
     }
 
     private async Task Save()
@@ -120,15 +118,17 @@
 
         try
         {
+            var htmlContent = await JS.InvokeAsync<string>("editorInterop.getHtml");
+
             if (isNew)
             {
                 var doc = await SopService.CreateDocumentAsync(selectedCategoryId, title);
-                await SopService.UpdateDocumentAsync(doc.Id, title, markdownContent);
+                await SopService.UpdateDocumentAsync(doc.Id, title, htmlContent);
                 Nav.NavigateTo($"/sop/{doc.Id}");
             }
             else
             {
-                await SopService.UpdateDocumentAsync(Id, title, markdownContent);
+                await SopService.UpdateDocumentAsync(Id, title, htmlContent);
                 Nav.NavigateTo($"/sop/{Id}");
             }
         }
@@ -148,5 +148,17 @@
             Nav.NavigateTo("/");
         else
             Nav.NavigateTo($"/sop/{Id}");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (editorInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("editorInterop.dispose");
+            }
+            catch (JSDisconnectedException) { }
+        }
     }
 }
