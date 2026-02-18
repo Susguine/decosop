@@ -19,18 +19,18 @@ jobs:
           .\dotnet-install.ps1 -Channel 10.0 -InstallDir $installDir
           echo "$installDir" | Out-File -Append -FilePath $env:GITHUB_PATH
           echo "DOTNET_ROOT=$installDir" | Out-File -Append -FilePath $env:GITHUB_ENV
-        shell: pwsh
+        shell: powershell
 
       - name: Publish app
         run: dotnet publish -c Release -r win-x64 --self-contained -o ./publish
 
       - name: Stop service
         run: Stop-Service -Name "DecoSOP" -ErrorAction SilentlyContinue
-        shell: pwsh
+        shell: powershell
 
       - name: Wait for service to stop
         run: Start-Sleep -Seconds 3
-        shell: pwsh
+        shell: powershell
 
       - name: Deploy files
         run: |
@@ -38,8 +38,8 @@ jobs:
           $dest = "C:\DecoSOP"
           if (!(Test-Path $dest)) { New-Item -ItemType Directory -Path $dest }
           Copy-Item -Path $source -Destination $dest -Recurse -Force -Exclude "decosop.db"
-        shell: pwsh
+        shell: powershell
 
       - name: Start service
         run: Start-Service -Name "DecoSOP"
-        shell: pwsh
+        shell: powershell
