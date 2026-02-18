@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseWindowsService();
+builder.WebHost.UseUrls("http://0.0.0.0:5098");
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
