@@ -1,9 +1,12 @@
 @inherits LayoutComponentBase
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
 
 <div class="page">
-    <div class="sidebar">
-        <NavMenu />
+    <div class="sidebar" id="app-sidebar">
+        <NavMenu @rendermode="InteractiveServer" />
     </div>
+
+    <div class="sidebar-resizer" id="sidebar-resizer"></div>
 
     <main>
         <article class="content px-4">

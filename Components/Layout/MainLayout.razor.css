@@ -52,10 +52,30 @@ main {
     }
 
     .sidebar {
-        width: 250px;
+        width: 320px;
+        min-width: 200px;
+        max-width: 50vw;
         height: 100vh;
         position: sticky;
         top: 0;
+        flex-shrink: 0;
+    }
+
+    .sidebar-resizer {
+        width: 5px;
+        cursor: col-resize;
+        background: transparent;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        flex-shrink: 0;
+        z-index: 10;
+        transition: background 0.15s;
+    }
+
+    .sidebar-resizer:hover,
+    .sidebar-resizer.dragging {
+        background: rgba(0, 107, 183, 0.3);
     }
 
     .top-row {
