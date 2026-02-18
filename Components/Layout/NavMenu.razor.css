@@ -46,7 +46,7 @@
 
 /* Category sections */
 .nav-section {
-    margin-top: 0.25rem;
+    margin-top: 0.15rem;
 }
 
 .nav-section-toggle {
@@ -61,7 +61,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 0.3rem 0;
+    padding: 0.25rem 0;
     cursor: pointer;
 }
 
@@ -78,6 +78,7 @@
 
 .nav-section-count {
     margin-left: auto;
+    padding-right: 0.75rem;
     font-size: 0.7rem;
     opacity: 0.5;
     font-weight: normal;
@@ -92,6 +93,7 @@
 .nav-item {
     font-size: 0.9rem;
     padding-bottom: 0;
+    margin-top: 0.05rem;
 }
 
 .nav-item ::deep .nav-link {
@@ -128,6 +130,13 @@
     display: block;
     font-size: 0.7rem;
     opacity: 0.5;
+}
+
+/* Favorites divider */
+.sidebar-divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    margin: 0.5rem 1rem;
 }
 
 @media (min-width: 641px) {

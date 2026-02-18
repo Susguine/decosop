@@ -2,6 +2,7 @@
 @using DecoSOP.Models
 @inject SopService SopService
 @inject NavigationManager Nav
+@implements IDisposable
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -36,6 +37,41 @@
     }
     else
     {
+        @if (hasFavorites)
+        {
+            <div class="nav-section px-3">
+                <button class="nav-section-toggle" @onclick="() => favoritesExpanded = !favoritesExpanded">
+                    <span class="toggle-icon">@(favoritesExpanded ? "▾" : "▸")</span>
+                    <span class="nav-section-title">&#9733; Favorites</span>
+                    <span class="nav-section-count">@(favoriteCategories.Count + favoriteDocuments.Count)</span>
+                </button>
+            </div>
+
+            @if (favoritesExpanded)
+            {
+                @foreach (var cat in favoriteCategories)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="@($"category/{cat.Id}")">
+                            @cat.Name
+                            <span class="nav-category-hint">folder</span>
+                        </NavLink>
+                    </div>
+                }
+                @foreach (var doc in favoriteDocuments)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="@($"sop/{doc.Id}")">
+                            @doc.Title
+                            <span class="nav-category-hint">@doc.Category.Name</span>
+                        </NavLink>
+                    </div>
+                }
+
+                <hr class="sidebar-divider" />
+            }
+        }
+
         <nav class="nav flex-column">
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
@@ -45,33 +81,9 @@
 
             @if (categories is not null)
             {
-                @foreach (var category in categories)
+                @foreach (var category in categories.OrderBy(c => c.Name))
                 {
-                    <div class="nav-section px-3 py-1">
-                        <button class="nav-section-toggle" @onclick="() => ToggleCategory(category.Id)">
-                            <span class="toggle-icon">@(IsExpanded(category.Id) ? "v" : ">")</span>
-                            <span class="nav-section-title">@category.Name</span>
-                            <span class="nav-section-count">@category.Documents.Count</span>
-                        </button>
-                    </div>
-
-                    @if (IsExpanded(category.Id))
-                    {
-                        @foreach (var doc in category.Documents)
-                        {
-                            <div class="nav-item px-3 ps-4">
-                                <NavLink class="nav-link" href="@($"sop/{doc.Id}")">
-                                    @doc.Title
-                                </NavLink>
-                            </div>
-                        }
-
-                        <div class="nav-item px-3 ps-4">
-                            <NavLink class="nav-link nav-link-new" href="@($"sop/new?categoryId={category.Id}")">
-                                + New SOP
-                            </NavLink>
-                        </div>
-                    }
+                    @RenderCategoryTree(category, 0)
                 }
             }
         </nav>
@@ -80,28 +92,41 @@
 
 @code {
     private List<Category>? categories;
+    private List<Category> favoriteCategories = [];
+    private List<SopDocument> favoriteDocuments = [];
     private HashSet<int> expandedCategories = [];
     private string searchQuery = string.Empty;
     private List<SopDocument> searchResults = [];
     private bool isSearching => !string.IsNullOrWhiteSpace(searchQuery);
+    private bool hasFavorites => favoriteCategories.Count > 0 || favoriteDocuments.Count > 0;
+    private bool favoritesExpanded = true;
     private System.Timers.Timer? debounceTimer;
 
     protected override async Task OnInitializedAsync()
     {
+        Nav.LocationChanged += OnLocationChanged;
         await LoadCategories();
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadCategories();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
     }
 
     public async Task LoadCategories()
     {
-        categories = await SopService.GetCategoriesAsync();
-
-        // Expand all categories by default
-        if (expandedCategories.Count == 0 && categories is not null)
-        {
-            foreach (var c in categories)
-                expandedCategories.Add(c.Id);
-        }
-
+        categories = await SopService.GetCategoryTreeAsync();
+        favoriteCategories = await SopService.GetFavoriteCategoriesAsync();
+        favoriteDocuments = await SopService.GetFavoriteDocumentsAsync();
         StateHasChanged();
     }
 
@@ -112,6 +137,52 @@
         if (!expandedCategories.Remove(categoryId))
             expandedCategories.Add(categoryId);
     }
+
+    private int GetTotalDocCount(Category cat)
+    {
+        int count = cat.Documents.Count;
+        foreach (var child in cat.Children)
+            count += GetTotalDocCount(child);
+        return count;
+    }
+
+    private RenderFragment RenderCategoryTree(Category category, int depth) => __builder =>
+    {
+        var paddingLeft = $"{1 + depth * 0.75}rem";
+        var docPaddingLeft = $"{1.75 + depth * 0.75}rem";
+        var totalCount = GetTotalDocCount(category);
+
+        <div class="nav-section" style="padding-left: @paddingLeft;">
+            <button class="nav-section-toggle" @onclick="() => ToggleCategory(category.Id)">
+                <span class="toggle-icon">@(IsExpanded(category.Id) ? "▾" : "▸")</span>
+                <span class="nav-section-title">@category.Name</span>
+                <span class="nav-section-count">@totalCount</span>
+            </button>
+        </div>
+
+        @if (IsExpanded(category.Id))
+        {
+            @foreach (var child in category.Children.OrderBy(c => c.Name))
+            {
+                @RenderCategoryTree(child, depth + 1)
+            }
+
+            @foreach (var doc in category.Documents)
+            {
+                <div class="nav-item" style="padding-left: @docPaddingLeft;">
+                    <NavLink class="nav-link" href="@($"sop/{doc.Id}")">
+                        @doc.Title
+                    </NavLink>
+                </div>
+            }
+
+            <div class="nav-item" style="padding-left: @docPaddingLeft;">
+                <NavLink class="nav-link nav-link-new" href="@($"sop/new?categoryId={category.Id}")">
+                    + New SOP
+                </NavLink>
+            </div>
+        }
+    };
 
     private async Task OnSearchKeyUp()
     {
