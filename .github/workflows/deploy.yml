@@ -4,9 +4,6 @@ on:
   push:
     branches: [main]
 
-env:
-  DOTNET_INSTALL_DIR: C:\actions-runner\.dotnet
-
 jobs:
   deploy:
     runs-on: self-hosted
@@ -15,10 +12,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
+      - name: Install .NET SDK
+        run: |
+          $installDir = "$env:RUNNER_TOOL_CACHE\dotnet"
+          Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
+          .\dotnet-install.ps1 -Channel 10.0 -InstallDir $installDir
+          echo "$installDir" | Out-File -Append -FilePath $env:GITHUB_PATH
+          echo "DOTNET_ROOT=$installDir" | Out-File -Append -FilePath $env:GITHUB_ENV
+        shell: pwsh
 
       - name: Publish app
         run: dotnet publish -c Release -r win-x64 --self-contained -o ./publish
