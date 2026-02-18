@@ -1,7 +1,6 @@
 @page "/sop/{Id:int}"
 @using DecoSOP.Services
 @using DecoSOP.Models
-@using Markdig
 @inject SopService SopService
 @inject NavigationManager Nav
 @rendermode InteractiveServer
@@ -16,7 +15,12 @@ else
 {
     <div class="sop-viewer">
         <div class="sop-toolbar">
-            <span class="sop-breadcrumb">@document.Category.Name / @document.Title</span>
+            <span class="sop-breadcrumb">@categoryPath / @document.Title</span>
+            <button class="btn-star btn-star-lg @(document.IsFavorited ? "starred" : "")"
+                    title="@(document.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                    @onclick="ToggleFavorite">
+                @(document.IsFavorited ? "\u2605" : "\u2606")
+            </button>
             <div class="sop-actions">
                 <button class="btn btn-sm btn-outline-primary" @onclick="Edit">Edit</button>
                 <button class="btn btn-sm btn-outline-danger" @onclick="ConfirmDelete">Delete</button>
@@ -32,8 +36,8 @@ else
             </div>
         }
 
-        <div class="sop-content markdown-body">
-            @((MarkupString)renderedHtml)
+        <div class="sop-content">
+            @((MarkupString)document.HtmlContent)
         </div>
 
         <div class="sop-footer text-muted small">
@@ -46,18 +50,20 @@ else
     [Parameter] public int Id { get; set; }
 
     private SopDocument? document;
-    private string renderedHtml = string.Empty;
+    private string categoryPath = string.Empty;
     private bool showDeleteConfirm;
-
-    private static readonly MarkdownPipeline pipeline = new MarkdownPipelineBuilder()
-        .UseAdvancedExtensions()
-        .Build();
 
     protected override async Task OnParametersSetAsync()
     {
         document = await SopService.GetDocumentAsync(Id);
         if (document is not null)
-            renderedHtml = Markdown.ToHtml(document.MarkdownContent, pipeline);
+            categoryPath = await SopService.GetCategoryPathAsync(document.CategoryId);
+    }
+
+    private async Task ToggleFavorite()
+    {
+        if (document is null) return;
+        document.IsFavorited = await SopService.ToggleDocumentFavoriteAsync(document.Id);
     }
 
     private void Edit() => Nav.NavigateTo($"/sop/{Id}/edit");

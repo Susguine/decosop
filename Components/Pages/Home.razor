@@ -10,22 +10,68 @@
     <h1>Standard Operating Procedures</h1>
     <p class="lead">Select a document from the sidebar, or browse categories below.</p>
 
+    @if (hasFavorites)
+    {
+        <div class="favorites-section">
+            <h2>&#9733; Favorites</h2>
+            <div class="category-grid">
+                @foreach (var cat in favoriteCategories)
+                {
+                    <div class="category-card">
+                        <h3>
+                            <a href="category/@cat.Id" class="category-heading-link">@cat.Name</a>
+                            <button class="btn-star starred" title="Remove from favorites"
+                                    @onclick="() => ToggleCategoryFavorite(cat)">&#9733;</button>
+                        </h3>
+                    </div>
+                }
+                @foreach (var doc in favoriteDocuments)
+                {
+                    <div class="category-card category-card-doc">
+                        <h3>
+                            <a href="sop/@doc.Id" class="category-heading-link">@doc.Title</a>
+                            <button class="btn-star starred" title="Remove from favorites"
+                                    @onclick="() => ToggleDocumentFavorite(doc)">&#9733;</button>
+                        </h3>
+                        <span class="text-muted small">@doc.Category.Name</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
     @if (categories is not null)
     {
         <div class="category-grid">
-            @foreach (var category in categories)
+            @foreach (var category in categories.OrderBy(c => c.Name))
             {
+                var totalCount = GetTotalDocCount(category);
                 <div class="category-card">
-                    <h3>@category.Name</h3>
-                    <ul>
-                        @foreach (var doc in category.Documents)
-                        {
-                            <li><a href="sop/@doc.Id">@doc.Title</a></li>
-                        }
-                    </ul>
-                    @if (category.Documents.Count == 0)
+                    <h3>
+                        <a href="category/@category.Id" class="category-heading-link">@category.Name</a>
+                        <span class="text-muted small">(@totalCount)</span>
+                        <button class="btn-star @(category.IsFavorited ? "starred" : "")"
+                                title="@(category.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                                @onclick="() => ToggleCategoryFavorite(category)">
+                            @(category.IsFavorited ? "\u2605" : "\u2606")
+                        </button>
+                    </h3>
+                    @if (category.Children.Any())
                     {
-                        <p class="text-muted">No SOPs yet.</p>
+                        <p class="text-muted small" style="margin:0 0 0.25rem 0;">@category.Children.Count subfolder@(category.Children.Count != 1 ? "s" : "")</p>
+                    }
+                    @if (category.Documents.Any())
+                    {
+                        <ul class="card-doc-list">
+                            @foreach (var doc in category.Documents.OrderBy(d => d.SortOrder))
+                            {
+                                <li><a href="sop/@doc.Id">@doc.Title</a></li>
+                            }
+                        </ul>
+                    }
+                    @if (totalCount == 0)
+                    {
+                        <p class="text-muted small" style="margin:0;">Empty</p>
                     }
                 </div>
             }
@@ -35,9 +81,36 @@
 
 @code {
     private List<Category>? categories;
+    private List<Category> favoriteCategories = [];
+    private List<SopDocument> favoriteDocuments = [];
+    private bool hasFavorites => favoriteCategories.Count > 0 || favoriteDocuments.Count > 0;
 
     protected override async Task OnInitializedAsync()
     {
-        categories = await SopService.GetCategoriesAsync();
+        categories = await SopService.GetCategoryTreeAsync();
+        favoriteCategories = await SopService.GetFavoriteCategoriesAsync();
+        favoriteDocuments = await SopService.GetFavoriteDocumentsAsync();
+    }
+
+    private async Task ToggleCategoryFavorite(Category cat)
+    {
+        cat.IsFavorited = await SopService.ToggleCategoryFavoriteAsync(cat.Id);
+        favoriteCategories = await SopService.GetFavoriteCategoriesAsync();
+        favoriteDocuments = await SopService.GetFavoriteDocumentsAsync();
+    }
+
+    private async Task ToggleDocumentFavorite(SopDocument doc)
+    {
+        doc.IsFavorited = await SopService.ToggleDocumentFavoriteAsync(doc.Id);
+        favoriteCategories = await SopService.GetFavoriteCategoriesAsync();
+        favoriteDocuments = await SopService.GetFavoriteDocumentsAsync();
+    }
+
+    private int GetTotalDocCount(Category cat)
+    {
+        int count = cat.Documents.Count;
+        foreach (var child in cat.Children)
+            count += GetTotalDocCount(child);
+        return count;
     }
 }
