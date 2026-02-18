@@ -8,7 +8,7 @@
 
 <div class="home-container">
     <h1>Standard Operating Procedures</h1>
-    <p class="lead">Select a document from the sidebar, or browse categories below.</p>
+    <p class="lead">Select a document from the sidebar, or browse categories below. <span class="text-muted small">(@totalDocCount total)</span></p>
 
     @if (hasFavorites)
     {
@@ -84,6 +84,7 @@
     private List<Category> favoriteCategories = [];
     private List<SopDocument> favoriteDocuments = [];
     private bool hasFavorites => favoriteCategories.Count > 0 || favoriteDocuments.Count > 0;
+    private int totalDocCount => categories?.Sum(c => GetTotalDocCount(c)) ?? 0;
 
     protected override async Task OnInitializedAsync()
     {
