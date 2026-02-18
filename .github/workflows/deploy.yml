@@ -1,0 +1,41 @@
+name: Deploy DecoSOP
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish app
+        run: dotnet publish -c Release -r win-x64 --self-contained -o ./publish
+
+      - name: Stop service
+        run: Stop-Service -Name "DecoSOP" -ErrorAction SilentlyContinue
+        shell: pwsh
+
+      - name: Wait for service to stop
+        run: Start-Sleep -Seconds 3
+        shell: pwsh
+
+      - name: Deploy files
+        run: |
+          $source = "./publish/*"
+          $dest = "C:\DecoSOP"
+          if (!(Test-Path $dest)) { New-Item -ItemType Directory -Path $dest }
+          Copy-Item -Path $source -Destination $dest -Recurse -Force -Exclude "decosop.db"
+        shell: pwsh
+
+      - name: Start service
+        run: Start-Service -Name "DecoSOP"
+        shell: pwsh
