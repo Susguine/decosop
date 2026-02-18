@@ -41,5 +41,10 @@ jobs:
         shell: powershell
 
       - name: Start service
-        run: Start-Service -Name "DecoSOP"
+        run: |
+          $svc = Get-Service -Name "DecoSOP" -ErrorAction SilentlyContinue
+          if (-not $svc) {
+            sc.exe create DecoSOP binPath="C:\DecoSOP\DecoSOP.exe" start=auto
+          }
+          Start-Service -Name "DecoSOP"
         shell: powershell
