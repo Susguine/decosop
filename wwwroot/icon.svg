@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1b6ec2"/>
-      <stop offset="100%" stop-color="#0f4c8a"/>
+      <stop offset="0%" stop-color="#3949ab"/>
+      <stop offset="100%" stop-color="#1a237e"/>
     </linearGradient>
     <linearGradient id="check" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#4ade80"/>
@@ -10,28 +10,25 @@
     </linearGradient>
   </defs>
 
-  <!-- Background -->
-  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
-
-  <!-- Shadow under page -->
-  <path d="M20 15 L40 15 L48 23 L48 54 L20 54 Z" fill="black" opacity="0.15"/>
+  <!-- Rounded background -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
 
   <!-- Page -->
-  <path d="M18 12 L38 12 L46 20 L46 52 L18 52 Z" fill="white"/>
+  <path d="M16 10 L36 10 L44 18 L44 52 L16 52 Z" fill="white"/>
 
   <!-- Page fold -->
-  <path d="M38 12 L38 20 L46 20 Z" fill="#d4e6f7"/>
+  <path d="M36 10 L36 18 L44 18 Z" fill="#b0c4de"/>
 
   <!-- Text lines -->
-  <line x1="23" y1="27" x2="36" y2="27" stroke="#c0d6ec" stroke-width="2" stroke-linecap="round"/>
-  <line x1="23" y1="33" x2="41" y2="33" stroke="#c0d6ec" stroke-width="2" stroke-linecap="round"/>
-  <line x1="23" y1="39" x2="33" y2="39" stroke="#c0d6ec" stroke-width="2" stroke-linecap="round"/>
+  <line x1="21" y1="26" x2="32" y2="26" stroke="#9ab0cc" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="21" y1="32" x2="38" y2="32" stroke="#9ab0cc" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="21" y1="38" x2="29" y2="38" stroke="#9ab0cc" stroke-width="2.5" stroke-linecap="round"/>
 
   <!-- Checkmark circle badge -->
   <circle cx="46" cy="44" r="13" fill="url(#check)"/>
-  <circle cx="46" cy="44" r="11.5" fill="url(#check)" stroke="white" stroke-width="1.5"/>
+  <circle cx="46" cy="44" r="11" fill="url(#check)" stroke="white" stroke-width="2"/>
 
   <!-- Checkmark -->
-  <polyline points="39,44 44,49 54,37" fill="none" stroke="white" stroke-width="3.5"
+  <polyline points="39,44 43.5,48.5 53,37" fill="none" stroke="white" stroke-width="3.5"
             stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
