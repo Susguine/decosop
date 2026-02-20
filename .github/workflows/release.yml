@@ -11,6 +11,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag -replace '^v', ''
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+          echo "Extracted version: $ver"
+        shell: powershell
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -18,20 +29,48 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Publish
-        run: dotnet publish -c Release -r win-x64 --self-contained -o ./release
+        run: dotnet publish -c Release -r win-x64 --self-contained -o ./publish -p:Version=${{ steps.version.outputs.VERSION }}
 
       - name: Bundle install scripts
         run: |
-          Copy-Item install.ps1 -Destination ./release/
-          Copy-Item uninstall.ps1 -Destination ./release/
+          Copy-Item install.ps1 -Destination ./publish/
+          Copy-Item uninstall.ps1 -Destination ./publish/
         shell: powershell
 
-      - name: Create zip
-        run: Compress-Archive -Path ./release/* -DestinationPath DecoSOP-${{ github.ref_name }}-win-x64.zip
+      - name: Create zip (portable)
+        run: Compress-Archive -Path ./publish/* -DestinationPath DecoSOP-${{ github.ref_name }}-win-x64.zip
+        shell: powershell
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+        shell: powershell
+
+      - name: Build installer
+        run: |
+          $env:PATH += ";C:\Program Files (x86)\Inno Setup 6"
+          iscc /DMyAppVersion="${{ steps.version.outputs.VERSION }}" installer\DecoSOP.iss
+        shell: powershell
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          $prev = git describe --tags --abbrev=0 HEAD~ 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $log = git log --oneline --no-decorate HEAD
+          } else {
+            $log = git log --oneline --no-decorate "$prev..HEAD"
+          }
+          $log = $log -join "`n"
+          # Write to file for multi-line output
+          $log | Out-File -FilePath changelog.txt -Encoding utf8
+          echo "Generated changelog with $(($log -split "`n").Count) entries"
         shell: powershell
 
       - name: Upload release
         uses: softprops/action-gh-release@v2
         with:
-          files: DecoSOP-${{ github.ref_name }}-win-x64.zip
+          files: |
+            DecoSOP-${{ github.ref_name }}-win-x64.zip
+            installer-output/DecoSOP-Setup-${{ steps.version.outputs.VERSION }}.exe
+          body_path: changelog.txt
           generate_release_notes: true

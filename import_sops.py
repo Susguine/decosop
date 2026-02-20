@@ -297,6 +297,11 @@ def get_category_for_path(cursor, rel_path: str, sort_counters: dict) -> int:
 
 
 def main():
+    if not os.path.isdir(PROTOCOLS_DIR):
+        print(f"ERROR: PROTOCOLS_DIR does not exist: {PROTOCOLS_DIR}")
+        print("Edit PROTOCOLS_DIR at the top of this script to point to your protocols folder.")
+        sys.exit(1)
+
     print(f"Scanning: {PROTOCOLS_DIR}")
     print(f"Database: {DB_PATH}")
     print()
