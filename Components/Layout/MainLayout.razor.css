@@ -9,7 +9,7 @@ main {
 }
 
 .sidebar {
-    background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
+    background-image: linear-gradient(180deg, var(--sidebar-top) 0%, var(--sidebar-bottom) 70%);
 }
 
 .top-row {
@@ -52,7 +52,7 @@ main {
     }
 
     .sidebar {
-        width: 320px;
+        width: 380px;
         min-width: 200px;
         max-width: 50vw;
         height: 100vh;
@@ -75,7 +75,7 @@ main {
 
     .sidebar-resizer:hover,
     .sidebar-resizer.dragging {
-        background: rgba(0, 107, 183, 0.3);
+        background: var(--sidebar-resizer-color, rgba(0, 107, 183, 0.3));
     }
 
     .top-row {

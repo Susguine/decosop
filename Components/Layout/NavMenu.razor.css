@@ -17,13 +17,123 @@
 }
 
 .navbar-brand {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+}
+
+.btn-favorites-header {
+    margin-left: auto;
+    color: #f5a623;
+    font-size: 1.5rem;
+    text-decoration: none;
+    opacity: 0.7;
+    transition: opacity 0.15s, text-shadow 0.15s;
+    line-height: 1;
+}
+
+.btn-favorites-header:hover {
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(245, 166, 35, 0.5);
+}
+
+/* Mode toggle */
+.mode-toggle {
+    position: relative;
+    display: flex;
+    gap: 0;
+    background: rgba(0,0,0,0.2);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.mode-toggle::before {
+    content: '';
+    position: absolute;
+    top: 0.35rem;
+    bottom: 0.35rem;
+    left: 1rem;
+    width: calc((100% - 2rem) / 4);
+    background: rgba(255,255,255,0.15);
+    border-radius: 4px;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.14s;
+    z-index: 0;
+}
+
+.mode-toggle[data-mode="sop"]::before {
+    transform: translateX(0);
+}
+
+.mode-toggle[data-mode="websop"]::before {
+    transform: translateX(100%);
+}
+
+.mode-toggle[data-mode="doc"]::before {
+    transform: translateX(200%);
+}
+
+.mode-toggle[data-mode="webdoc"]::before {
+    transform: translateX(300%);
+}
+
+.mode-toggle[data-mode="favorites"]::before {
+    opacity: 0;
+}
+
+.mode-toggle-btn {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.5);
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.4rem 0.15rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    transition: color 0.15s;
+    border-radius: 4px;
+}
+
+.mode-toggle-btn:hover {
+    color: rgba(255,255,255,0.8);
+}
+
+.mode-toggle-btn.active {
+    color: white;
 }
 
 .sidebar-content {
-    height: calc(100vh - 3.5rem);
+    height: calc(100vh - 6rem - 2rem);
     overflow-y: auto;
     padding-bottom: 1rem;
+}
+
+.sidebar-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 1rem;
+    height: 2rem;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar-settings-link {
+    color: rgba(255,255,255,0.4);
+    text-decoration: none;
+    font-size: 1rem;
+    transition: color 0.15s;
+}
+
+.sidebar-settings-link:hover {
+    color: rgba(255,255,255,0.8);
+}
+
+.sidebar-version {
+    color: rgba(255,255,255,0.3);
+    font-size: 0.7rem;
 }
 
 .sidebar-search input {
