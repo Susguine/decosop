@@ -1,19 +1,18 @@
-@page "/sop/{Id:int}/edit"
-@page "/sop/new"
+@page "/webdocs/{Id:int}/edit"
+@page "/webdocs/new"
 @using DecoSOP.Services
 @using DecoSOP.Models
-@inject SopService SopService
+@inject WebDocService WebDocService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
-@rendermode InteractiveServer
 @implements IAsyncDisposable
 
-<PageTitle>@(isNew ? "New SOP" : $"Edit: {title}") - DecoSOP</PageTitle>
+<PageTitle>@(isNew ? "New Web Doc" : $"Edit: {title}") - DecoSOP</PageTitle>
 
 <div class="sop-editor">
     <div class="sop-toolbar">
         <input type="text" class="form-control form-control-lg sop-title-input"
-               placeholder="SOP Title" @bind="title" />
+               placeholder="Document Title" @bind="title" />
         <div class="sop-actions">
             <button class="btn btn-sm btn-success" @onclick="Save" disabled="@isSaving">
                 @(isSaving ? "Saving..." : "Save")
@@ -65,8 +64,7 @@
     {
         if (isNew)
         {
-            var allCats = await SopService.GetAllCategoriesAsync();
-            // Build path labels for each category
+            var allCats = await WebDocService.GetAllCategoriesAsync();
             var lookup = allCats.ToDictionary(c => c.Id);
             categoryOptions = allCats.Select(c =>
             {
@@ -84,10 +82,10 @@
         }
         else
         {
-            var doc = await SopService.GetDocumentAsync(Id);
+            var doc = await WebDocService.GetDocumentAsync(Id);
             if (doc is null)
             {
-                Nav.NavigateTo("/");
+                Nav.NavigateTo("/webdocs");
                 return;
             }
             title = doc.Title;
@@ -114,22 +112,29 @@
             return;
         }
 
+        if (title.Trim().Length > 200)
+        {
+            error = "Title must be 200 characters or fewer.";
+            return;
+        }
+
         isSaving = true;
 
         try
         {
             var htmlContent = await JS.InvokeAsync<string>("editorInterop.getHtml");
+            await JS.InvokeVoidAsync("editorInterop.clearDirty");
 
             if (isNew)
             {
-                var doc = await SopService.CreateDocumentAsync(selectedCategoryId, title);
-                await SopService.UpdateDocumentAsync(doc.Id, title, htmlContent);
-                Nav.NavigateTo($"/sop/{doc.Id}");
+                var doc = await WebDocService.CreateDocumentAsync(selectedCategoryId, title);
+                await WebDocService.UpdateDocumentAsync(doc.Id, title, htmlContent);
+                Nav.NavigateTo($"/webdocs/{doc.Id}");
             }
             else
             {
-                await SopService.UpdateDocumentAsync(Id, title, htmlContent);
-                Nav.NavigateTo($"/sop/{Id}");
+                await WebDocService.UpdateDocumentAsync(Id, title, htmlContent);
+                Nav.NavigateTo($"/webdocs/{Id}");
             }
         }
         catch (Exception ex)
@@ -145,9 +150,9 @@
     private void Cancel()
     {
         if (isNew)
-            Nav.NavigateTo("/");
+            Nav.NavigateTo("/webdocs");
         else
-            Nav.NavigateTo($"/sop/{Id}");
+            Nav.NavigateTo($"/webdocs/{Id}");
     }
 
     public async ValueTask DisposeAsync()
