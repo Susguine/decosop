@@ -1,6 +1,6 @@
 namespace DecoSOP.Models;
 
-public class Category
+public class DocumentCategory
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -9,7 +9,7 @@ public class Category
     public bool IsPinned { get; set; }
     public string? Color { get; set; }
     public int? ParentId { get; set; }
-    public Category? Parent { get; set; }
-    public List<Category> Children { get; set; } = [];
-    public List<SopDocument> Documents { get; set; } = [];
+    public DocumentCategory? Parent { get; set; }
+    public List<DocumentCategory> Children { get; set; } = [];
+    public List<OfficeDocument> Documents { get; set; } = [];
 }
