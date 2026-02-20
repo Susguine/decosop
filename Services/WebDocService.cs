@@ -4,11 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DecoSOP.Services;
 
-public class WebSopService
+public class WebDocService
 {
     private readonly AppDbContext _db;
 
-    public WebSopService(AppDbContext db) => _db = db;
+    public WebDocService(AppDbContext db) => _db = db;
 
     private static void ValidateName(string? name, string field = "Name")
     {
@@ -20,35 +20,27 @@ public class WebSopService
 
     // --- Categories ---
 
-    /// <summary>
-    /// Returns the full category tree (roots with nested children) with documents at each level.
-    /// </summary>
-    public async Task<List<Category>> GetCategoryTreeAsync()
+    public async Task<List<WebDocCategory>> GetCategoryTreeAsync()
     {
-        // Load all categories and documents in one query; EF Core fixes up navigation properties
-        var all = await _db.Categories
+        var all = await _db.WebDocCategories
             .Include(c => c.Documents.OrderBy(d => d.SortOrder))
             .OrderBy(c => c.SortOrder)
             .ToListAsync();
 
-        // Return only root categories (ParentId == null); children are already wired via EF fixup
         return all.Where(c => c.ParentId == null).ToList();
     }
 
-    /// <summary>
-    /// Returns a flat list of all categories (for dropdowns).
-    /// </summary>
-    public async Task<List<Category>> GetAllCategoriesAsync()
-        => await _db.Categories.OrderBy(c => c.SortOrder).ToListAsync();
+    public async Task<List<WebDocCategory>> GetAllCategoriesAsync()
+        => await _db.WebDocCategories.OrderBy(c => c.SortOrder).ToListAsync();
 
-    public async Task<Category> CreateCategoryAsync(string name, int? parentId = null)
+    public async Task<WebDocCategory> CreateCategoryAsync(string name, int? parentId = null)
     {
         ValidateName(name, "Category name");
-        var maxSort = await _db.Categories
+        var maxSort = await _db.WebDocCategories
             .Where(c => c.ParentId == parentId)
             .MaxAsync(c => (int?)c.SortOrder) ?? -1;
-        var category = new Category { Name = name.Trim(), SortOrder = maxSort + 1, ParentId = parentId };
-        _db.Categories.Add(category);
+        var category = new WebDocCategory { Name = name.Trim(), SortOrder = maxSort + 1, ParentId = parentId };
+        _db.WebDocCategories.Add(category);
         await _db.SaveChangesAsync();
         return category;
     }
@@ -56,7 +48,7 @@ public class WebSopService
     public async Task RenameCategoryAsync(int id, string newName)
     {
         ValidateName(newName, "Category name");
-        var cat = await _db.Categories.FindAsync(id);
+        var cat = await _db.WebDocCategories.FindAsync(id);
         if (cat is null) return;
         cat.Name = newName.Trim();
         await _db.SaveChangesAsync();
@@ -64,18 +56,15 @@ public class WebSopService
 
     public async Task DeleteCategoryAsync(int id)
     {
-        var cat = await _db.Categories.FindAsync(id);
+        var cat = await _db.WebDocCategories.FindAsync(id);
         if (cat is null) return;
-        _db.Categories.Remove(cat);
+        _db.WebDocCategories.Remove(cat);
         await _db.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Builds "Parent > Child > Grandchild" breadcrumb path for a category.
-    /// </summary>
     public async Task<string> GetCategoryPathAsync(int categoryId)
     {
-        var all = await _db.Categories.AsNoTracking().ToListAsync();
+        var all = await _db.WebDocCategories.AsNoTracking().ToListAsync();
         var parts = new List<string>();
         var current = all.FirstOrDefault(c => c.Id == categoryId);
         while (current is not null)
@@ -86,13 +75,9 @@ public class WebSopService
         return string.Join(" / ", parts);
     }
 
-    /// <summary>
-    /// Returns a single category with its direct children and documents loaded.
-    /// </summary>
-    public async Task<Category?> GetCategoryWithChildrenAsync(int categoryId)
+    public async Task<WebDocCategory?> GetCategoryWithChildrenAsync(int categoryId)
     {
-        // Load all categories + documents so EF fixup wires Children navigations
-        var all = await _db.Categories
+        var all = await _db.WebDocCategories
             .Include(c => c.Documents.OrderBy(d => d.SortOrder))
             .OrderBy(c => c.SortOrder)
             .ToListAsync();
@@ -100,12 +85,9 @@ public class WebSopService
         return all.FirstOrDefault(c => c.Id == categoryId);
     }
 
-    /// <summary>
-    /// Returns breadcrumb list of (Id, Name) from root down to the given category.
-    /// </summary>
     public async Task<List<(int Id, string Name)>> GetCategoryBreadcrumbsAsync(int categoryId)
     {
-        var all = await _db.Categories.AsNoTracking().ToListAsync();
+        var all = await _db.WebDocCategories.AsNoTracking().ToListAsync();
         var crumbs = new List<(int Id, string Name)>();
         var current = all.FirstOrDefault(c => c.Id == categoryId);
         while (current is not null)
@@ -118,27 +100,27 @@ public class WebSopService
 
     // --- Documents ---
 
-    public async Task<SopDocument?> GetDocumentAsync(int id)
-        => await _db.Documents
+    public async Task<WebDocument?> GetDocumentAsync(int id)
+        => await _db.WebDocuments
             .Include(d => d.Category)
             .FirstOrDefaultAsync(d => d.Id == id);
 
-    public async Task<SopDocument> CreateDocumentAsync(int categoryId, string title)
+    public async Task<WebDocument> CreateDocumentAsync(int categoryId, string title)
     {
         ValidateName(title, "Title");
-        var maxSort = await _db.Documents
+        var maxSort = await _db.WebDocuments
             .Where(d => d.CategoryId == categoryId)
             .MaxAsync(d => (int?)d.SortOrder) ?? -1;
 
-        var doc = new SopDocument
+        var doc = new WebDocument
         {
             CategoryId = categoryId,
             Title = title.Trim(),
-            HtmlContent = $"<h1>{System.Net.WebUtility.HtmlEncode(title.Trim())}</h1><p>Start writing your SOP here...</p>",
+            HtmlContent = $"<h1>{System.Net.WebUtility.HtmlEncode(title.Trim())}</h1><p>Start writing here...</p>",
             SortOrder = maxSort + 1
         };
 
-        _db.Documents.Add(doc);
+        _db.WebDocuments.Add(doc);
         await _db.SaveChangesAsync();
         return doc;
     }
@@ -146,7 +128,7 @@ public class WebSopService
     public async Task UpdateDocumentAsync(int id, string title, string htmlContent)
     {
         ValidateName(title, "Title");
-        var doc = await _db.Documents.FindAsync(id);
+        var doc = await _db.WebDocuments.FindAsync(id);
         if (doc is null) return;
         doc.Title = title.Trim();
         doc.HtmlContent = htmlContent;
@@ -156,18 +138,18 @@ public class WebSopService
 
     public async Task DeleteDocumentAsync(int id)
     {
-        var doc = await _db.Documents.FindAsync(id);
+        var doc = await _db.WebDocuments.FindAsync(id);
         if (doc is null) return;
-        _db.Documents.Remove(doc);
+        _db.WebDocuments.Remove(doc);
         await _db.SaveChangesAsync();
     }
 
-    public async Task<List<SopDocument>> SearchAsync(string query)
+    public async Task<List<WebDocument>> SearchAsync(string query)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
 
         var term = query.Trim().ToLower();
-        return await _db.Documents
+        return await _db.WebDocuments
             .Include(d => d.Category)
             .Where(d => d.Title.ToLower().Contains(term)
                      || d.HtmlContent.ToLower().Contains(term))
@@ -180,7 +162,7 @@ public class WebSopService
 
     public async Task<bool> ToggleCategoryFavoriteAsync(int categoryId)
     {
-        var cat = await _db.Categories.FindAsync(categoryId);
+        var cat = await _db.WebDocCategories.FindAsync(categoryId);
         if (cat is null) return false;
         cat.IsFavorited = !cat.IsFavorited;
         await _db.SaveChangesAsync();
@@ -189,7 +171,7 @@ public class WebSopService
 
     public async Task<bool> ToggleDocumentFavoriteAsync(int documentId)
     {
-        var doc = await _db.Documents.FindAsync(documentId);
+        var doc = await _db.WebDocuments.FindAsync(documentId);
         if (doc is null) return false;
         doc.IsFavorited = !doc.IsFavorited;
         await _db.SaveChangesAsync();
@@ -198,7 +180,7 @@ public class WebSopService
 
     public async Task<bool> ToggleCategoryPinAsync(int categoryId)
     {
-        var cat = await _db.Categories.FindAsync(categoryId);
+        var cat = await _db.WebDocCategories.FindAsync(categoryId);
         if (cat is null) return false;
         cat.IsPinned = !cat.IsPinned;
         await _db.SaveChangesAsync();
@@ -207,21 +189,21 @@ public class WebSopService
 
     public async Task SetCategoryColorAsync(int categoryId, string? color)
     {
-        var cat = await _db.Categories.FindAsync(categoryId);
+        var cat = await _db.WebDocCategories.FindAsync(categoryId);
         if (cat is null) return;
         cat.Color = color;
         await _db.SaveChangesAsync();
     }
 
-    public async Task<List<Category>> GetFavoriteCategoriesAsync()
-        => await _db.Categories
+    public async Task<List<WebDocCategory>> GetFavoriteCategoriesAsync()
+        => await _db.WebDocCategories
             .Where(c => c.IsFavorited)
             .OrderByDescending(c => c.IsPinned)
             .ThenBy(c => c.Name)
             .ToListAsync();
 
-    public async Task<List<SopDocument>> GetFavoriteDocumentsAsync()
-        => await _db.Documents
+    public async Task<List<WebDocument>> GetFavoriteDocumentsAsync()
+        => await _db.WebDocuments
             .Include(d => d.Category)
             .Where(d => d.IsFavorited)
             .OrderBy(d => d.Title)

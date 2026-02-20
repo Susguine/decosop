@@ -1,0 +1,216 @@
+@page "/webdocs/category/{Id:int}"
+@using DecoSOP.Services
+@using DecoSOP.Models
+@inject WebDocService WebDocService
+@inject DataCacheService Cache
+@inject NavigationManager Nav
+@inject ContextMenuState MenuState
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>@(category?.Name ?? "Category") - Web Docs - DecoSOP</PageTitle>
+
+@if (category is null)
+{
+    <div class="home-container">
+        <div class="skeleton-line skeleton-title" style="width:30%; height:28px; margin-bottom:1rem;"></div>
+        <SkeletonCards Count="6" />
+    </div>
+}
+else
+{
+    <div class="home-container">
+        <nav class="breadcrumb-nav" aria-label="breadcrumb">
+            <a href="/webdocs">Web Docs</a>
+            @foreach (var crumb in breadcrumbs)
+            {
+                <span> / </span>
+                @if (crumb.Id == category.Id)
+                {
+                    <span>@crumb.Name</span>
+                }
+                else
+                {
+                    <a href="webdocs/category/@crumb.Id">@crumb.Name</a>
+                }
+            }
+        </nav>
+
+        <div class="sop-toolbar" style="border-bottom:none; padding-bottom:0; margin-bottom:0.5rem;">
+            <button class="btn btn-sm btn-outline-secondary me-2" @onclick="GoBack" title="Back">&larr; Back</button>
+            <h1 style="margin:0;">@category.Name</h1>
+            <div class="sop-actions">
+                <a class="btn btn-sm btn-success" href="webdocs/new?categoryId=@category.Id">+ New Web Doc</a>
+            </div>
+        </div>
+
+        <div class="category-grid">
+                @foreach (var child in category.Children.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+                {
+                    var childTotal = GetTotalDocCount(child);
+                    <div class="category-card @(child.Color is not null ? $"card-color-{child.Color}" : "")"
+                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, child.Id, child.Name, child.IsFavorited, child.IsPinned, child.Color, CategoryType.WebDoc)"
+                         @oncontextmenu:preventDefault="true">
+                        <h3>
+                            <FolderIcon Color="@child.Color" />
+                            <a href="webdocs/category/@child.Id" class="category-heading-link">@child.Name</a>
+                            <span class="text-muted small">(@childTotal)</span>
+                            @if (child.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }
+                            <button class="btn-star @(child.IsFavorited ? "starred" : "")"
+                                    title="@(child.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                                    @onclick="() => ToggleCategoryFavorite(child)">
+                                @(child.IsFavorited ? "\u2605" : "\u2606")
+                            </button>
+                        </h3>
+                        @if (child.Children.Any())
+                        {
+                            <p class="text-muted small" style="margin:0 0 0.25rem 0;">@child.Children.Count subfolder@(child.Children.Count != 1 ? "s" : "")</p>
+                        }
+                        @if (child.Documents.Any())
+                        {
+                            <ul class="card-doc-list">
+                                @foreach (var doc in child.Documents.OrderBy(d => d.SortOrder))
+                                {
+                                    <li @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, doc.IsFavorited, false, null, CategoryType.WebDoc, ItemKind.Document)"
+                                        @oncontextmenu:preventDefault="true"
+                                        @oncontextmenu:stopPropagation="true"><a href="webdocs/@doc.Id">@doc.Title</a> <span class="file-type-badge badge-wdoc">WDoc</span></li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                }
+
+                @foreach (var doc in category.Documents.OrderBy(d => d.SortOrder))
+                {
+                    <div class="category-card category-card-doc"
+                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, doc.IsFavorited, false, null, CategoryType.WebDoc, ItemKind.Document)"
+                         @oncontextmenu:preventDefault="true">
+                        <h3>
+                            <a href="webdocs/@doc.Id" class="category-heading-link">@doc.Title</a>
+                            <span class="file-type-badge badge-wdoc">WDoc</span>
+                            <button class="btn-star @(doc.IsFavorited ? "starred" : "")"
+                                    title="@(doc.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                                    @onclick="() => ToggleDocumentFavorite(doc)">
+                                @(doc.IsFavorited ? "\u2605" : "\u2606")
+                            </button>
+                        </h3>
+                    </div>
+                }
+                <div class="new-folder-card" @onclick="CreateSubfolder">
+                    <span>+ New Subfolder</span>
+                </div>
+            </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private CancellationTokenSource _cts = new();
+    private WebDocCategory? category;
+    private List<(int Id, string Name)> breadcrumbs = [];
+    private bool _needsLoad;
+    protected override void OnInitialized()
+    {
+        MenuState.OnCategoryModified += RefreshData;
+        MenuState.OnChange += StateHasChanged;
+    }
+
+    protected override void OnParametersSet()
+    {
+        category = null;
+        _needsLoad = true;
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_needsLoad)
+        {
+            _needsLoad = false;
+            _ = LoadDataAsync();
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            await Task.Run(async () =>
+            {
+                category = await Cache.FindWebDocCategoryAsync(Id);
+                if (category is not null)
+                    breadcrumbs = await Cache.GetWebDocBreadcrumbsAsync(Id);
+            }, _cts.Token);
+            StateHasChanged();
+        }
+        catch (ObjectDisposedException) { }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task RefreshData()
+    {
+        try
+        {
+            await Task.Run(async () =>
+            {
+                category = await Cache.FindWebDocCategoryAsync(Id);
+                if (category is not null)
+                    breadcrumbs = await Cache.GetWebDocBreadcrumbsAsync(Id);
+            }, _cts.Token);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) { }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        MenuState.OnCategoryModified -= RefreshData;
+        MenuState.OnChange -= StateHasChanged;
+    }
+
+    private async Task ToggleCategoryFavorite(WebDocCategory cat)
+    {
+        cat.IsFavorited = await Cache.RunExclusiveAsync(() => WebDocService.ToggleCategoryFavoriteAsync(cat.Id));
+    }
+
+    private async Task ToggleDocumentFavorite(WebDocument doc)
+    {
+        doc.IsFavorited = await Cache.RunExclusiveAsync(() => WebDocService.ToggleDocumentFavoriteAsync(doc.Id));
+    }
+
+    private async Task CreateSubfolder()
+    {
+        var name = await JS.InvokeAsync<string?>("prompt", "New subfolder name:");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (name.Trim().Length > 200)
+        {
+            await JS.InvokeVoidAsync("alert", "Name must be 200 characters or fewer.");
+            return;
+        }
+
+        await Cache.RunExclusiveAsync(() => WebDocService.CreateCategoryAsync(name, Id));
+        Cache.InvalidateAll();
+        await RefreshData();
+        await MenuState.NotifyCategoryModified();
+    }
+
+    private void GoBack()
+    {
+        if (breadcrumbs.Count >= 2)
+            Nav.NavigateTo($"webdocs/category/{breadcrumbs[^2].Id}");
+        else
+            Nav.NavigateTo("webdocs");
+    }
+
+    private int GetTotalDocCount(WebDocCategory cat)
+    {
+        int count = cat.Documents.Count;
+        foreach (var child in cat.Children)
+            count += GetTotalDocCount(child);
+        return count;
+    }
+}

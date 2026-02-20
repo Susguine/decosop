@@ -1,0 +1,215 @@
+@using DecoSOP.Services
+@inject ContextMenuState MenuState
+@inject SopFileService SopFileService
+@inject WebSopService WebSopService
+@inject DocumentService DocService
+@inject WebDocService WebDocService
+@inject DataCacheService Cache
+@inject IJSRuntime JS
+@implements IDisposable
+
+@if (MenuState.IsVisible)
+{
+    <div class="context-menu" style="left: @(MenuState.X)px; top: @(MenuState.Y)px;"
+         @onclick:stopPropagation="true">
+        <button class="context-menu-item" @onclick="ToggleFavorite">
+            @(MenuState.IsFavorited ? "\u2605 Unfavorite" : "\u2606 Favorite")
+        </button>
+        @if (MenuState.Kind == ItemKind.Category)
+        {
+            <button class="context-menu-item" @onclick="TogglePin">
+                @(MenuState.IsPinned ? "\U0001F4CC Unpin" : "\U0001F4CC Pin to top")
+            </button>
+            <hr class="context-menu-divider" />
+            <div class="context-menu-color-picker">
+                <span class="context-menu-color-label">Color</span>
+                <div class="context-menu-color-swatches">
+                    @foreach (var (key, hex) in FolderColors)
+                    {
+                        <button class="color-swatch @(MenuState.Color == key ? "active" : "")"
+                                style="background: @hex;"
+                                title="@key"
+                                @onclick="() => SetColor(key)">
+                        </button>
+                    }
+                    <button class="color-swatch color-swatch-none @(MenuState.Color == null ? "active" : "")"
+                            title="Default"
+                            @onclick="() => SetColor(null)">
+                        &times;
+                    </button>
+                </div>
+            </div>
+            <hr class="context-menu-divider" />
+            <button class="context-menu-item" @onclick="Rename">
+                Rename
+            </button>
+            <hr class="context-menu-divider" />
+            <button class="context-menu-item context-menu-item-danger" @onclick="Delete">
+                Delete
+            </button>
+        }
+    </div>
+}
+
+@code {
+    private static readonly (string Key, string Hex)[] FolderColors =
+    [
+        ("red", "#e53935"),
+        ("orange", "#fb8c00"),
+        ("yellow", "#fdd835"),
+        ("green", "#43a047"),
+        ("teal", "#00897b"),
+        ("blue", "#1e88e5"),
+        ("purple", "#8e24aa"),
+        ("pink", "#d81b60"),
+        ("brown", "#6d4c41"),
+        ("gray", "#757575"),
+    ];
+
+    private DotNetObjectReference<CategoryContextMenu>? dotNetRef;
+    private bool jsInitialized;
+
+    protected override void OnInitialized()
+    {
+        MenuState.OnChange += StateHasChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("contextMenuInterop.init", dotNetRef);
+            jsInitialized = true;
+        }
+
+        if (MenuState.IsVisible && jsInitialized)
+        {
+            await JS.InvokeVoidAsync("contextMenuInterop.adjustPosition");
+        }
+    }
+
+    [JSInvokable]
+    public void CloseMenu() => MenuState.Hide();
+
+    private async Task ToggleFavorite()
+    {
+        if (MenuState.Kind == ItemKind.Document)
+        {
+            if (MenuState.Type == CategoryType.Sop)
+                await Cache.RunExclusiveAsync(() => SopFileService.ToggleDocumentFavoriteAsync(MenuState.ItemId));
+            else if (MenuState.Type == CategoryType.WebSop)
+                await Cache.RunExclusiveAsync(() => WebSopService.ToggleDocumentFavoriteAsync(MenuState.ItemId));
+            else if (MenuState.Type == CategoryType.Document)
+                await Cache.RunExclusiveAsync(() => DocService.ToggleDocumentFavoriteAsync(MenuState.ItemId));
+            else
+                await Cache.RunExclusiveAsync(() => WebDocService.ToggleDocumentFavoriteAsync(MenuState.ItemId));
+        }
+        else
+        {
+            if (MenuState.Type == CategoryType.Sop)
+                await Cache.RunExclusiveAsync(() => SopFileService.ToggleCategoryFavoriteAsync(MenuState.ItemId));
+            else if (MenuState.Type == CategoryType.WebSop)
+                await Cache.RunExclusiveAsync(() => WebSopService.ToggleCategoryFavoriteAsync(MenuState.ItemId));
+            else if (MenuState.Type == CategoryType.Document)
+                await Cache.RunExclusiveAsync(() => DocService.ToggleCategoryFavoriteAsync(MenuState.ItemId));
+            else
+                await Cache.RunExclusiveAsync(() => WebDocService.ToggleCategoryFavoriteAsync(MenuState.ItemId));
+        }
+
+        MenuState.Hide();
+        await MenuState.NotifyCategoryModified();
+    }
+
+    private async Task TogglePin()
+    {
+        if (MenuState.Type == CategoryType.Sop)
+            await Cache.RunExclusiveAsync(() => SopFileService.ToggleCategoryPinAsync(MenuState.ItemId));
+        else if (MenuState.Type == CategoryType.WebSop)
+            await Cache.RunExclusiveAsync(() => WebSopService.ToggleCategoryPinAsync(MenuState.ItemId));
+        else if (MenuState.Type == CategoryType.Document)
+            await Cache.RunExclusiveAsync(() => DocService.ToggleCategoryPinAsync(MenuState.ItemId));
+        else
+            await Cache.RunExclusiveAsync(() => WebDocService.ToggleCategoryPinAsync(MenuState.ItemId));
+
+        MenuState.Hide();
+    }
+
+    private async Task SetColor(string? color)
+    {
+        if (MenuState.Type == CategoryType.Sop)
+            await Cache.RunExclusiveAsync(() => SopFileService.SetCategoryColorAsync(MenuState.ItemId, color));
+        else if (MenuState.Type == CategoryType.WebSop)
+            await Cache.RunExclusiveAsync(() => WebSopService.SetCategoryColorAsync(MenuState.ItemId, color));
+        else if (MenuState.Type == CategoryType.Document)
+            await Cache.RunExclusiveAsync(() => DocService.SetCategoryColorAsync(MenuState.ItemId, color));
+        else
+            await Cache.RunExclusiveAsync(() => WebDocService.SetCategoryColorAsync(MenuState.ItemId, color));
+
+        MenuState.Hide();
+    }
+
+    private async Task Rename()
+    {
+        var newName = await JS.InvokeAsync<string?>(
+            "prompt", "Rename category:", MenuState.CategoryName);
+
+        MenuState.Hide();
+
+        if (!string.IsNullOrWhiteSpace(newName) && newName != MenuState.CategoryName)
+        {
+            if (newName.Trim().Length > 200)
+            {
+                await JS.InvokeVoidAsync("alert", "Name must be 200 characters or fewer.");
+                return;
+            }
+
+            if (MenuState.Type == CategoryType.Sop)
+                await Cache.RunExclusiveAsync(() => SopFileService.RenameCategoryAsync(MenuState.CategoryId, newName));
+            else if (MenuState.Type == CategoryType.WebSop)
+                await Cache.RunExclusiveAsync(() => WebSopService.RenameCategoryAsync(MenuState.CategoryId, newName));
+            else if (MenuState.Type == CategoryType.Document)
+                await Cache.RunExclusiveAsync(() => DocService.RenameCategoryAsync(MenuState.CategoryId, newName));
+            else
+                await Cache.RunExclusiveAsync(() => WebDocService.RenameCategoryAsync(MenuState.CategoryId, newName));
+
+            await MenuState.NotifyCategoryModified();
+        }
+    }
+
+    private async Task Delete()
+    {
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm", $"Delete \"{MenuState.CategoryName}\"? This cannot be undone.");
+
+        MenuState.Hide();
+
+        if (confirmed)
+        {
+            try
+            {
+                if (MenuState.Type == CategoryType.Sop)
+                    await Cache.RunExclusiveAsync(() => SopFileService.DeleteCategoryAsync(MenuState.CategoryId));
+                else if (MenuState.Type == CategoryType.WebSop)
+                    await Cache.RunExclusiveAsync(() => WebSopService.DeleteCategoryAsync(MenuState.CategoryId));
+                else if (MenuState.Type == CategoryType.Document)
+                    await Cache.RunExclusiveAsync(() => DocService.DeleteCategoryAsync(MenuState.CategoryId));
+                else
+                    await Cache.RunExclusiveAsync(() => WebDocService.DeleteCategoryAsync(MenuState.CategoryId));
+
+                await MenuState.NotifyCategoryModified();
+            }
+            catch
+            {
+                await JS.InvokeVoidAsync("alert",
+                    "Cannot delete this category. Remove all subcategories and documents first.");
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        MenuState.OnChange -= StateHasChanged;
+        dotNetRef?.Dispose();
+    }
+}

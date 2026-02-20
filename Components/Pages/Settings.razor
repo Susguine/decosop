@@ -1,0 +1,300 @@
+@page "/settings"
+@using DecoSOP.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AppDbContext Db
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Settings - DecoSOP</PageTitle>
+
+<div class="settings-container">
+    <h1>Settings</h1>
+
+    <div class="settings-section">
+        <h2>Database Statistics</h2>
+        @if (stats is not null)
+        {
+            <div class="doc-meta">
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">DB Size</span>
+                    <span>@stats.DbFileSize</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">SOP Categories</span>
+                    <span>@stats.SopFileCategoryCount</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">SOP Files</span>
+                    <span>@stats.SopFileCount</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Web SOP Categories</span>
+                    <span>@stats.WebSopCategoryCount</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Web SOPs</span>
+                    <span>@stats.WebSopDocumentCount</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Doc Categories</span>
+                    <span>@stats.DocCategoryCount</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Documents</span>
+                    <span>@stats.OfficeDocumentCount</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Web Doc Categories</span>
+                    <span>@stats.WebDocCategoryCount</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Web Docs</span>
+                    <span>@stats.WebDocumentCount</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted">Loading...</p>
+        }
+    </div>
+
+    <div class="settings-section">
+        <h2>Database Backup</h2>
+        <p class="text-muted small">Download a copy of the SQLite database file for backup.</p>
+        <a href="/api/settings/export-db" class="btn btn-sm btn-primary" download="decosop-backup.db">Export Database</a>
+    </div>
+
+    <div class="settings-section">
+        <h2>Database Restore</h2>
+        <p class="text-muted small">Upload a previously exported database file to replace the current database. The application will need to be restarted after import.</p>
+
+        @if (!string.IsNullOrEmpty(importMessage))
+        {
+            <div class="alert @(importSuccess ? "alert-success" : "alert-danger") mt-2">@importMessage</div>
+        }
+
+        <InputFile OnChange="OnImportFileSelected" accept=".db" class="form-control form-control-sm" style="max-width:400px;" />
+
+        @if (importFile is not null)
+        {
+            <div class="mt-2">
+                <button class="btn btn-sm btn-danger" @onclick="ImportDatabase" disabled="@isImporting">
+                    @(isImporting ? "Importing..." : "Replace Database")
+                </button>
+                <span class="text-muted small ms-2">@importFile.Name (@FormatSize(importFile.Size))</span>
+            </div>
+        }
+    </div>
+
+    <div class="settings-section">
+        <h2>Demo Data</h2>
+        <p class="text-muted small">Populate the database with sample categories and documents to explore the app's features. Only works when the database is empty.</p>
+        @if (!string.IsNullOrEmpty(demoMessage))
+        {
+            <div class="alert @(demoSuccess ? "alert-success" : "alert-warning") mt-2">@demoMessage</div>
+        }
+        <button class="btn btn-sm btn-outline-primary" @onclick="LoadDemoData" disabled="@isLoadingDemo">
+            @(isLoadingDemo ? "Loading..." : "Load Demo Data")
+        </button>
+    </div>
+
+    <div class="settings-section">
+        <h2>About</h2>
+        <div class="doc-meta">
+            <div class="doc-meta-row">
+                <span class="doc-meta-label">Author</span>
+                <span>Tyler Sweeney</span>
+            </div>
+            <div class="doc-meta-row">
+                <span class="doc-meta-label">Version</span>
+                <span>@appVersion</span>
+            </div>
+            <div class="doc-meta-row">
+                <span class="doc-meta-label">Runtime</span>
+                <span>.NET @Environment.Version</span>
+            </div>
+            <div class="doc-meta-row">
+                <span class="doc-meta-label">Platform</span>
+                <span>@System.Runtime.InteropServices.RuntimeInformation.OSDescription</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DbStats? stats;
+    private IBrowserFile? importFile;
+    private string importMessage = "";
+    private bool importSuccess;
+    private bool isImporting;
+    private string demoMessage = "";
+    private bool demoSuccess;
+    private bool isLoadingDemo;
+
+    private static readonly string appVersion = System.Reflection.Assembly.GetExecutingAssembly()
+        .GetName().Version?.ToString(3) ?? "1.0.0";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStats();
+    }
+
+    private async Task LoadStats()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var dbPath = db.Database.GetDbConnection().DataSource;
+        var fileSize = File.Exists(dbPath) ? new FileInfo(dbPath).Length : 0;
+
+        stats = new DbStats
+        {
+            DbFileSize = FormatSize(fileSize),
+            SopFileCategoryCount = await db.SopCategories.CountAsync(),
+            SopFileCount = await db.SopFiles.CountAsync(),
+            WebSopCategoryCount = await db.Categories.CountAsync(),
+            WebSopDocumentCount = await db.Documents.CountAsync(),
+            DocCategoryCount = await db.DocumentCategories.CountAsync(),
+            OfficeDocumentCount = await db.OfficeDocuments.CountAsync(),
+            WebDocCategoryCount = await db.WebDocCategories.CountAsync(),
+            WebDocumentCount = await db.WebDocuments.CountAsync()
+        };
+    }
+
+    private void OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        importFile = e.File;
+        importMessage = "";
+    }
+
+    private async Task ImportDatabase()
+    {
+        if (importFile is null) return;
+
+        isImporting = true;
+        importMessage = "";
+
+        try
+        {
+            // Read the uploaded file
+            using var stream = importFile.OpenReadStream(maxAllowedSize: 500 * 1024 * 1024);
+            var tempPath = Path.GetTempFileName();
+            await using (var fs = new FileStream(tempPath, FileMode.Create))
+            {
+                await stream.CopyToAsync(fs);
+            }
+
+            // Validate SQLite magic bytes
+            var header = new byte[16];
+            await using (var fs = File.OpenRead(tempPath))
+            {
+                await fs.ReadExactlyAsync(header);
+            }
+
+            var magic = System.Text.Encoding.ASCII.GetString(header, 0, 15);
+            if (magic != "SQLite format 3")
+            {
+                File.Delete(tempPath);
+                importMessage = "Invalid file. Please upload a valid SQLite database.";
+                importSuccess = false;
+                return;
+            }
+
+            // Replace the database file
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var dbPath = db.Database.GetDbConnection().DataSource;
+            await db.Database.CloseConnectionAsync();
+            File.Copy(tempPath, dbPath, overwrite: true);
+            File.Delete(tempPath);
+
+            importMessage = "Database imported successfully. Please restart the application for changes to take effect.";
+            importSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            importMessage = $"Import failed: {ex.Message}";
+            importSuccess = false;
+        }
+        finally
+        {
+            isImporting = false;
+        }
+    }
+
+    private async Task LoadDemoData()
+    {
+        isLoadingDemo = true;
+        demoMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            // Run everything on a thread-pool thread to avoid Blazor sync context deadlocks.
+            // Use Task.WhenAny for a reliable timeout that doesn't depend on CancellationToken plumbing.
+            var factory = DbFactory;
+            var work = Task.Run(async () =>
+            {
+                await using var db = await factory.CreateDbContextAsync();
+                return await DecoSOP.Services.DemoDataService.SeedDemoDataAsync(db);
+            });
+            var timeout = Task.Delay(TimeSpan.FromSeconds(30));
+            var finished = await Task.WhenAny(work, timeout);
+
+            if (finished == timeout)
+            {
+                demoMessage = "Demo data loading timed out after 30 seconds. The database may be locked or unavailable.";
+                demoSuccess = false;
+            }
+            else if (work.IsFaulted)
+            {
+                demoMessage = $"Could not load demo data: {work.Exception?.InnerException?.Message ?? work.Exception?.Message}";
+                demoSuccess = false;
+            }
+            else
+            {
+                var seeded = await work;
+                if (seeded)
+                {
+                    await LoadStats();
+                    demoMessage = "Demo data loaded successfully! Browse SOPs, Documents, and Web Docs to see the sample content.";
+                    demoSuccess = true;
+                }
+                else
+                {
+                    demoMessage = "Database already contains data. Demo data can only be loaded into an empty database.";
+                    demoSuccess = false;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            demoMessage = $"Could not load demo data: {ex.Message}";
+            demoSuccess = false;
+        }
+        finally
+        {
+            isLoadingDemo = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private class DbStats
+    {
+        public string DbFileSize { get; set; } = "";
+        public int SopFileCategoryCount { get; set; }
+        public int SopFileCount { get; set; }
+        public int WebSopCategoryCount { get; set; }
+        public int WebSopDocumentCount { get; set; }
+        public int DocCategoryCount { get; set; }
+        public int OfficeDocumentCount { get; set; }
+        public int WebDocCategoryCount { get; set; }
+        public int WebDocumentCount { get; set; }
+    }
+}

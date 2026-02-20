@@ -1,11 +1,13 @@
-@page "/sop/{Id:int}"
+@page "/websops/{Id:int}"
 @using DecoSOP.Services
 @using DecoSOP.Models
-@inject SopService SopService
+@inject WebSopService WebSopService
+@inject DataCacheService Cache
 @inject NavigationManager Nav
 @rendermode InteractiveServer
 
-<PageTitle>@(document?.Title ?? "SOP") - DecoSOP</PageTitle>
+<div data-mode="websop"></div>
+<PageTitle>@(document?.Title ?? "Web SOP") - DecoSOP</PageTitle>
 
 @if (document is null)
 {
@@ -55,24 +57,24 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        document = await SopService.GetDocumentAsync(Id);
+        document = await Cache.RunExclusiveAsync(() => WebSopService.GetDocumentAsync(Id));
         if (document is not null)
-            categoryPath = await SopService.GetCategoryPathAsync(document.CategoryId);
+            categoryPath = await Cache.RunExclusiveAsync(() => WebSopService.GetCategoryPathAsync(document.CategoryId));
     }
 
     private async Task ToggleFavorite()
     {
         if (document is null) return;
-        document.IsFavorited = await SopService.ToggleDocumentFavoriteAsync(document.Id);
+        document.IsFavorited = await Cache.RunExclusiveAsync(() => WebSopService.ToggleDocumentFavoriteAsync(document.Id));
     }
 
-    private void Edit() => Nav.NavigateTo($"/sop/{Id}/edit");
+    private void Edit() => Nav.NavigateTo($"/websops/{Id}/edit");
 
     private void ConfirmDelete() => showDeleteConfirm = true;
 
     private async Task Delete()
     {
-        await SopService.DeleteDocumentAsync(Id);
-        Nav.NavigateTo("/");
+        await Cache.RunExclusiveAsync(() => WebSopService.DeleteDocumentAsync(Id));
+        Nav.NavigateTo("/websops");
     }
 }

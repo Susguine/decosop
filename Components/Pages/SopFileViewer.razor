@@ -1,0 +1,193 @@
+@page "/sops/{Id:int}"
+@using DecoSOP.Services
+@using DecoSOP.Models
+@inject SopFileService SopFileService
+@inject DataCacheService Cache
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div data-mode="sop"></div>
+<PageTitle>@(document?.Title ?? "SOP") - DecoSOP</PageTitle>
+
+@if (document is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="sop-viewer">
+        <div class="sop-toolbar">
+            <button class="btn btn-sm btn-outline-secondary me-2" @onclick="GoBack" title="Back to category">
+                &larr; Back
+            </button>
+            <span class="sop-breadcrumb">@categoryPath / @document.Title</span>
+            <button class="btn-star btn-star-lg @(document.IsFavorited ? "starred" : "")"
+                    title="@(document.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                    @onclick="ToggleFavorite">
+                @(document.IsFavorited ? "\u2605" : "\u2606")
+            </button>
+            <div class="sop-actions">
+                @if (canPreview)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="PrintDocument">Print</button>
+                }
+                <a class="btn btn-sm btn-primary" href="/api/sops/@document.Id/download" target="_blank">Download</a>
+                <button class="btn btn-sm btn-outline-danger" @onclick="ConfirmDelete">Delete</button>
+            </div>
+        </div>
+
+        @if (showDeleteConfirm)
+        {
+            <div class="alert alert-danger d-flex align-items-center gap-2 mt-2">
+                <span>Delete "<strong>@document.Title</strong>"? This cannot be undone.</span>
+                <button class="btn btn-sm btn-danger" @onclick="Delete">Yes, delete</button>
+                <button class="btn btn-sm btn-secondary" @onclick="() => showDeleteConfirm = false">Cancel</button>
+            </div>
+        }
+
+        @* --- Inline previews by file type --- *@
+        @if (isImage)
+        {
+            <div class="doc-preview">
+                <img src="/api/sops/@document.Id/preview" alt="@document.Title" class="doc-preview-image" />
+            </div>
+        }
+        else if (isPdf)
+        {
+            <div class="doc-preview">
+                <iframe src="/api/sops/@document.Id/preview" class="doc-preview-frame"></iframe>
+            </div>
+        }
+        else if (isConvertible)
+        {
+            @* Office documents: converted to PDF by LibreOffice for full-fidelity viewing *@
+            <div class="doc-preview">
+                @if (converting)
+                {
+                    <div class="converting-indicator">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span>Generating preview (first view may take a moment)...</span>
+                    </div>
+                }
+                <iframe id="pdf-preview-frame" src="" class="doc-preview-frame @(converting ? "d-none" : "")"></iframe>
+            </div>
+        }
+        else
+        {
+            <div class="doc-meta">
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">File</span>
+                    <span>@document.FileName</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Type</span>
+                    <span>
+                        <span class="file-type-badge badge-@SopFileService.GetFileExtension(document.FileName).ToLower()">
+                            @SopFileService.GetFileExtension(document.FileName)
+                        </span>
+                    </span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Size</span>
+                    <span>@SopFileService.FormatFileSize(document.FileSize)</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Category</span>
+                    <span>@categoryPath</span>
+                </div>
+                <div class="doc-meta-row">
+                    <span class="doc-meta-label">Uploaded</span>
+                    <span>@document.CreatedAt.ToLocalTime().ToString("MMMM d, yyyy h:mm tt")</span>
+                </div>
+            </div>
+            <div class="download-section">
+                <a class="download-btn" href="/api/sops/@document.Id/download" target="_blank">
+                    Download @document.FileName
+                </a>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private SopFile? document;
+    private string categoryPath = string.Empty;
+    private bool showDeleteConfirm;
+    private bool converting;
+    private bool pdfLoaded;
+
+    private string fileExt => Path.GetExtension(document?.FileName ?? "").ToLowerInvariant();
+    private bool isPdf => document?.ContentType == "application/pdf";
+    private bool isImage => document?.ContentType?.StartsWith("image/") == true;
+    private bool isConvertible => PdfConversionService.CanConvert(document?.FileName ?? "");
+    private bool canPreview => isPdf || isImage || isConvertible;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        document = await Cache.RunExclusiveAsync(() => SopFileService.GetDocumentAsync(Id));
+        pdfLoaded = false;
+        converting = false;
+        if (document is not null)
+            categoryPath = await Cache.RunExclusiveAsync(() => SopFileService.GetCategoryPathAsync(document.CategoryId));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (document is not null && isConvertible && !pdfLoaded)
+        {
+            pdfLoaded = true;
+            converting = true;
+            StateHasChanged();
+
+            var pdfUrl = $"/api/sops/{document.Id}/preview-pdf";
+            await JS.InvokeVoidAsync("documentInterop.loadPdfPreview", "pdf-preview-frame", pdfUrl);
+
+            converting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void GoBack()
+    {
+        if (document is not null)
+            Nav.NavigateTo($"/sops/category/{document.CategoryId}");
+        else
+            Nav.NavigateTo("/sops");
+    }
+
+    private async Task ToggleFavorite()
+    {
+        if (document is null) return;
+        document.IsFavorited = await Cache.RunExclusiveAsync(() => SopFileService.ToggleDocumentFavoriteAsync(document.Id));
+    }
+
+    private async Task PrintDocument()
+    {
+        if (document is null) return;
+
+        if (isConvertible)
+        {
+            await JS.InvokeVoidAsync("documentInterop.printPdf", $"/api/sops/{document.Id}/preview-pdf");
+        }
+        else if (isPdf)
+        {
+            var previewUrl = $"/api/sops/{document.Id}/preview";
+            await JS.InvokeVoidAsync("documentInterop.printFile", previewUrl, document.ContentType, document.Title);
+        }
+        else if (isImage)
+        {
+            var previewUrl = $"/api/sops/{document.Id}/preview";
+            await JS.InvokeVoidAsync("documentInterop.printFile", previewUrl, document.ContentType, document.Title);
+        }
+    }
+
+    private void ConfirmDelete() => showDeleteConfirm = true;
+
+    private async Task Delete()
+    {
+        await Cache.RunExclusiveAsync(() => SopFileService.DeleteDocumentAsync(Id));
+        Nav.NavigateTo("/sops");
+    }
+}

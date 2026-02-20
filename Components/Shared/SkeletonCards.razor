@@ -1,0 +1,18 @@
+<div class="category-grid">
+    @for (int i = 0; i < Count; i++)
+    {
+        <div class="skeleton-card">
+            <div class="skeleton-header">
+                <div class="skeleton-line skeleton-title"></div>
+                <div class="skeleton-circle"></div>
+            </div>
+            <div class="skeleton-line skeleton-subtitle"></div>
+            <div class="skeleton-line skeleton-text"></div>
+            <div class="skeleton-line skeleton-text short"></div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Count { get; set; } = 12;
+}

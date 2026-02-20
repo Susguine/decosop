@@ -119,7 +119,9 @@ To keep your data when uninstalling:
 C:\DecoSOP\uninstall.ps1 -KeepData
 ```
 
-## Importing existing documents
+## Importing existing data
+
+### SOPs
 
 If you have SOPs in `.docx`, `.doc`, or `.xlsx` files, the `import_sops.py` script can bulk-import them into the database. It converts documents to HTML and mirrors your folder structure as categories.
 
@@ -135,6 +137,25 @@ Edit `PROTOCOLS_DIR` and `DB_PATH` at the top of the script to point to your fil
 python import_sops.py
 ```
 
+### Office documents
+
+If you have office documents (PDFs, Word files, spreadsheets, etc.) organized in folders, the `import_documents.py` script can bulk-import them. It copies the files into the app's uploads directory and mirrors your folder structure as document categories.
+
+**Requires:** Python 3.10+ (no extra packages needed)
+
+Edit `DOCUMENTS_DIR`, `DB_PATH`, and `UPLOADS_DIR` at the top of the script, then run:
+
+```bash
+python import_documents.py
+```
+
+For a production install, set the paths to the install directory:
+
+```python
+DB_PATH = r"C:\DecoSOP\decosop.db"
+UPLOADS_DIR = r"C:\DecoSOP\uploads"
+```
+
 ## Development
 
 ```bash
@@ -147,11 +168,12 @@ The app runs at `http://localhost:5098` with hot reload. The SQLite database is 
 
 ```
 Components/
-  Layout/          - MainLayout, NavMenu (sidebar)
-  Pages/           - Home, CategoryView, SopEditor, SopViewer
+  Layout/          - MainLayout, NavMenu (sidebar with SOPs/Documents toggle)
+  Pages/           - SOP pages (Home, CategoryView, SopEditor, SopViewer)
+                     Document pages (DocHome, DocCategoryView, DocumentViewer, DocumentUpload)
 Data/              - EF Core DbContext
-Models/            - Category, SopDocument
-Services/          - SopService (data access)
+Models/            - Category, SopDocument, DocumentCategory, OfficeDocument
+Services/          - SopService, DocumentService
 wwwroot/js/        - Editor interop, sidebar resize
 ```
 

@@ -1,0 +1,43 @@
+@using DecoSOP.Services
+@inject UpdateService UpdateService
+@implements IDisposable
+
+@if (UpdateService.UpdateAvailable)
+{
+    <div class="update-banner">
+        <span class="update-banner-text">
+            Version <strong>@UpdateService.NewVersion</strong> is available.
+        </span>
+        <a href="@UpdateService.DownloadUrl" target="_blank" class="btn btn-sm btn-light update-banner-btn">Download</a>
+        <button class="btn btn-sm btn-outline-light update-banner-btn" @onclick="SkipVersion">Skip this version</button>
+        <button class="update-banner-close" @onclick="Dismiss" title="Dismiss">&times;</button>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        UpdateService.OnUpdateChecked += OnUpdateChecked;
+    }
+
+    private void OnUpdateChecked()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SkipVersion()
+    {
+        if (UpdateService.NewVersion is not null)
+            UpdateService.SkipVersion(UpdateService.NewVersion);
+    }
+
+    private void Dismiss()
+    {
+        UpdateService.Dismiss();
+    }
+
+    public void Dispose()
+    {
+        UpdateService.OnUpdateChecked -= OnUpdateChecked;
+    }
+}

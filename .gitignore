@@ -59,6 +59,18 @@ Desktop.ini
 
 ## Publish output
 publish/
+installer-output/
+
+## Document uploads
+uploads/
+sop-uploads/
+
+## Python
+__pycache__/
+*.pyc
+*.pyo
 
 ## Claude
 CLAUDE.md
+.claude/
+RELEASE_CONTEXT.md

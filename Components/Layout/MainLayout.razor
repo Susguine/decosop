@@ -1,22 +1,45 @@
 @inherits LayoutComponentBase
-@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using DecoSOP.Components.Shared
 
 <div class="page">
     <div class="sidebar" id="app-sidebar">
-        <NavMenu @rendermode="InteractiveServer" />
+        <NavMenu />
     </div>
 
     <div class="sidebar-resizer" id="sidebar-resizer"></div>
 
     <main>
+        <UpdateBanner />
         <article class="content px-4">
-            @Body
+            <ErrorBoundary @ref="errorBoundary">
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent>
+                    <div class="alert alert-danger m-4" role="alert">
+                        <h4>Something went wrong</h4>
+                        <p>An unexpected error occurred on this page. Your data is safe.</p>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="Recover">Recover</button>
+                    </div>
+                </ErrorContent>
+            </ErrorBoundary>
         </article>
     </main>
 </div>
+
+<CategoryContextMenu />
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">X</span>
 </div>
+
+@code {
+    private ErrorBoundary? errorBoundary;
+
+    private void Recover()
+    {
+        errorBoundary?.Recover();
+    }
+}

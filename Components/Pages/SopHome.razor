@@ -1,0 +1,210 @@
+@page "/"
+@page "/sops"
+@using DecoSOP.Services
+@using DecoSOP.Models
+@inject SopFileService SopFileService
+@inject DataCacheService Cache
+@inject ContextMenuState MenuState
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div data-mode="sop"></div>
+<PageTitle>SOPs - DecoSOP</PageTitle>
+
+<div class="home-container">
+    <h1>SOPs</h1>
+    <p class="lead">Upload and organize standard operating procedure files. <span class="text-muted small">(@totalDocCount total)</span></p>
+
+    @if (hasFavorites)
+    {
+        <div class="favorites-section">
+            <h2>&#9733; Favorites</h2>
+            <div class="category-grid">
+                @foreach (var cat in favoriteCategories)
+                {
+                    <div class="category-card @(cat.Color is not null ? $"card-color-{cat.Color}" : "")"
+                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, cat.Id, cat.Name, cat.IsFavorited, cat.IsPinned, cat.Color, CategoryType.Sop)"
+                         @oncontextmenu:preventDefault="true">
+                        <h3>
+                            <FolderIcon Color="@cat.Color" />
+                            <a href="sops/category/@cat.Id" class="category-heading-link">@cat.Name</a>
+                            @if (cat.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }
+                            <button class="btn-star starred" title="Remove from favorites"
+                                    @onclick="() => ToggleCategoryFavorite(cat)">&#9733;</button>
+                        </h3>
+                    </div>
+                }
+                @foreach (var doc in favoriteDocuments)
+                {
+                    <div class="category-card category-card-doc"
+                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, doc.IsFavorited, false, null, CategoryType.Sop, ItemKind.Document)"
+                         @oncontextmenu:preventDefault="true">
+                        <h3>
+                            <a href="sops/@doc.Id" class="category-heading-link">@doc.Title</a>
+                            <span class="file-type-badge badge-@SopFileService.GetFileExtension(doc.FileName).ToLower()">@SopFileService.GetFileExtension(doc.FileName)</span>
+                            <button class="btn-star starred" title="Remove from favorites"
+                                    @onclick="() => ToggleDocumentFavorite(doc)">&#9733;</button>
+                        </h3>
+                        <span class="text-muted small">@doc.Category.Name &middot; @SopFileService.FormatFileSize(doc.FileSize)</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (categories is null)
+    {
+        <SkeletonCards />
+    }
+    else
+    {
+        <div class="category-grid">
+            @foreach (var category in categories.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+            {
+                var totalCount = GetTotalDocCount(category);
+                <div class="category-card @(category.Color is not null ? $"card-color-{category.Color}" : "")"
+                     @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, category.IsFavorited, category.IsPinned, category.Color, CategoryType.Sop)"
+                     @oncontextmenu:preventDefault="true">
+                    <h3>
+                        <FolderIcon Color="@category.Color" />
+                        <a href="sops/category/@category.Id" class="category-heading-link">@category.Name</a>
+                        <span class="text-muted small">(@totalCount)</span>
+                        @if (category.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }
+                        <button class="btn-star @(category.IsFavorited ? "starred" : "")"
+                                title="@(category.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                                @onclick="() => ToggleCategoryFavorite(category)">
+                            @(category.IsFavorited ? "\u2605" : "\u2606")
+                        </button>
+                    </h3>
+                    @if (category.Children.Any())
+                    {
+                        <p class="text-muted small" style="margin:0 0 0.25rem 0;">@category.Children.Count subfolder@(category.Children.Count != 1 ? "s" : "")</p>
+                    }
+                    @if (category.Documents.Any())
+                    {
+                        <ul class="card-doc-list">
+                            @foreach (var doc in category.Documents.OrderBy(d => d.SortOrder))
+                            {
+                                <li @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, doc.IsFavorited, false, null, CategoryType.Sop, ItemKind.Document)"
+                                    @oncontextmenu:preventDefault="true"
+                                    @oncontextmenu:stopPropagation="true">
+                                    <a href="sops/@doc.Id">@doc.Title</a>
+                                    <span class="file-type-badge badge-@SopFileService.GetFileExtension(doc.FileName).ToLower()">@SopFileService.GetFileExtension(doc.FileName)</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    @if (totalCount == 0)
+                    {
+                        <p class="text-muted small" style="margin:0;">Empty</p>
+                    }
+                </div>
+            }
+
+            <div class="new-folder-card" @onclick="CreateFolder">
+                <span>+ New Folder</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private CancellationTokenSource _cts = new();
+    private List<SopCategory>? categories;
+    private List<SopCategory> favoriteCategories = [];
+    private List<SopFile> favoriteDocuments = [];
+    private bool hasFavorites => favoriteCategories.Count > 0 || favoriteDocuments.Count > 0;
+    private int totalDocCount => categories?.Sum(c => GetTotalDocCount(c)) ?? 0;
+    protected override void OnInitialized()
+    {
+        MenuState.OnCategoryModified += RefreshData;
+        MenuState.OnChange += StateHasChanged;
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _ = LoadDataAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            await Task.Run(async () =>
+            {
+                categories = await Cache.GetSopTreeAsync();
+                favoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
+                favoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+            }, _cts.Token);
+            StateHasChanged();
+        }
+        catch (ObjectDisposedException) { }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task RefreshData()
+    {
+        try
+        {
+            await Task.Run(async () =>
+            {
+                categories = await Cache.GetSopTreeAsync();
+                favoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
+                favoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+            }, _cts.Token);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) { }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        MenuState.OnCategoryModified -= RefreshData;
+        MenuState.OnChange -= StateHasChanged;
+    }
+
+    private async Task ToggleCategoryFavorite(SopCategory cat)
+    {
+        cat.IsFavorited = await Cache.RunExclusiveAsync(() => SopFileService.ToggleCategoryFavoriteAsync(cat.Id));
+        Cache.InvalidateSopFavorites();
+        favoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
+        favoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+    }
+
+    private async Task ToggleDocumentFavorite(SopFile doc)
+    {
+        doc.IsFavorited = await Cache.RunExclusiveAsync(() => SopFileService.ToggleDocumentFavoriteAsync(doc.Id));
+        Cache.InvalidateSopFavorites();
+        favoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
+        favoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+    }
+
+    private async Task CreateFolder()
+    {
+        var name = await JS.InvokeAsync<string?>("prompt", "New folder name:");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (name.Trim().Length > 200)
+        {
+            await JS.InvokeVoidAsync("alert", "Name must be 200 characters or fewer.");
+            return;
+        }
+
+        await Cache.RunExclusiveAsync(() => SopFileService.CreateCategoryAsync(name));
+        Cache.InvalidateAll();
+        await RefreshData();
+        await MenuState.NotifyCategoryModified();
+    }
+
+    private int GetTotalDocCount(SopCategory cat)
+    {
+        int count = cat.Documents.Count;
+        foreach (var child in cat.Children)
+            count += GetTotalDocCount(child);
+        return count;
+    }
+}
