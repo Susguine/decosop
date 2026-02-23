@@ -19,7 +19,7 @@
 ;  15. Finish (open in browser)
 
 #define MyAppName "DecoSOP"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "Tyler Sweeney"
 #define MyAppURL "https://github.com/Susguine/decosop"
 #define MyAppExeName "DecoSOP.exe"
