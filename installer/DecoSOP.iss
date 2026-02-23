@@ -142,6 +142,7 @@ var
   AutoInstallCheckbox: TNewCheckBox;
   AutoInstallTimeLabel: TNewStaticText;
   AutoInstallTimeCombo: TNewComboBox;
+  IsUpgradeInstall: Boolean;
 
 // ---- Port helpers ----
 
@@ -378,6 +379,7 @@ begin
     end;
 
     // Yes = Upgrade/Reinstall: silently remove old service/firewall, then continue
+    IsUpgradeInstall := True;
     if UninstallString <> '' then
     begin
       if (Length(UninstallString) > 1) and (UninstallString[1] = '"') then
@@ -731,8 +733,29 @@ end;
 // ---- Page visibility + validation ----
 
 function ShouldSkipPage(PageID: Integer): Boolean;
+var
+  DbPath: String;
 begin
   Result := False;
+
+  // On upgrade, skip database setup and all import/scan pages (DB already exists)
+  DbPath := AddBackslash(WizardDirValue) + 'decosop.db';
+  if IsUpgradeInstall or FileExists(DbPath) then
+  begin
+    if (DatabasePage <> nil) and (PageID = DatabasePage.ID) then
+      Result := True;
+    if (ImportDbPage <> nil) and (PageID = ImportDbPage.ID) then
+      Result := True;
+    if (ImportSopDirPage <> nil) and (PageID = ImportSopDirPage.ID) then
+      Result := True;
+    if (ImportDocDirPage <> nil) and (PageID = ImportDocDirPage.ID) then
+      Result := True;
+    if (ScanSopDirPage <> nil) and (PageID = ScanSopDirPage.ID) then
+      Result := True;
+    if (ScanDocDirPage <> nil) and (PageID = ScanDocDirPage.ID) then
+      Result := True;
+    Exit;
+  end;
 
   // Skip import backup pages unless "Import backup" is selected
   if (ImportDbPage <> nil) and (PageID = ImportDbPage.ID) then
