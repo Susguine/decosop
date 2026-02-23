@@ -2,12 +2,32 @@
 @inject UpdateService UpdateService
 @implements IDisposable
 
-@if (UpdateService.UpdateAvailable)
+@if (UpdateService.IsInstalling)
+{
+    <div class="update-banner">
+        <span class="update-banner-text">
+            Installing update... The app will restart shortly.
+        </span>
+    </div>
+}
+else if (UpdateService.IsDownloading)
+{
+    <div class="update-banner">
+        <span class="update-banner-text">
+            Downloading update... (@((UpdateService.DownloadProgress * 100).ToString("F0"))%)
+        </span>
+    </div>
+}
+else if (UpdateService.UpdateAvailable)
 {
     <div class="update-banner">
         <span class="update-banner-text">
             Version <strong>@UpdateService.NewVersion</strong> is available.
         </span>
+        @if (UpdateService.ZipUrl is not null)
+        {
+            <button class="btn btn-sm btn-success update-banner-btn" @onclick="InstallNow">Install Now</button>
+        }
         <a href="@UpdateService.DownloadUrl" target="_blank" class="btn btn-sm btn-light update-banner-btn">Download</a>
         <button class="btn btn-sm btn-outline-light update-banner-btn" @onclick="SkipVersion">Skip this version</button>
         <button class="update-banner-close" @onclick="Dismiss" title="Dismiss">&times;</button>
@@ -23,6 +43,11 @@
     private void OnUpdateChecked()
     {
         InvokeAsync(StateHasChanged);
+    }
+
+    private async Task InstallNow()
+    {
+        await UpdateService.DownloadAndInstallAsync();
     }
 
     private void SkipVersion()

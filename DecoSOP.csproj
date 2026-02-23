@@ -7,8 +7,7 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
     <Authors>Tyler Sweeney</Authors>
     <Company>Deco Dental</Company>
     <Copyright>Copyright (c) 2025 Tyler Sweeney</Copyright>

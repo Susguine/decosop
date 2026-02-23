@@ -2,6 +2,7 @@
 @using DecoSOP.Services
 @using DecoSOP.Models
 @inject WebSopService WebSopService
+@inject UserPreferenceService Prefs
 @inject DataCacheService Cache
 @inject NavigationManager Nav
 @inject ContextMenuState MenuState
@@ -46,21 +47,21 @@ else
         </div>
 
         <div class="category-grid">
-                @foreach (var child in category.Children.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+                @foreach (var child in category.Children.OrderByDescending(c => IsCatPinned(c.Id)).ThenBy(c => c.Name))
                 {
                     var childTotal = GetTotalDocCount(child);
-                    <div class="category-card @(child.Color is not null ? $"card-color-{child.Color}" : "")"
-                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, child.Id, child.Name, child.IsFavorited, child.IsPinned, child.Color, CategoryType.WebSop)"
+                    <div class="category-card @(GetCatColor(child.Id) is string c ? $"card-color-{c}" : "")"
+                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, child.Id, child.Name, IsCatFavorited(child.Id), IsCatPinned(child.Id), GetCatColor(child.Id), CategoryType.WebSop)"
                          @oncontextmenu:preventDefault="true">
                         <h3>
-                            <FolderIcon Color="@child.Color" />
+                            <FolderIcon Color="@GetCatColor(child.Id)" />
                             <a href="websops/category/@child.Id" class="category-heading-link">@child.Name</a>
                             <span class="text-muted small">(@childTotal)</span>
-                            @if (child.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }
-                            <button class="btn-star @(child.IsFavorited ? "starred" : "")"
-                                    title="@(child.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                            @if (IsCatPinned(child.Id)) { <span class="pin-icon" title="Pinned">&#128204;</span> }
+                            <button class="btn-star @(IsCatFavorited(child.Id) ? "starred" : "")"
+                                    title="@(IsCatFavorited(child.Id) ? "Remove from favorites" : "Add to favorites")"
                                     @onclick="() => ToggleCategoryFavorite(child)">
-                                @(child.IsFavorited ? "\u2605" : "\u2606")
+                                @(IsCatFavorited(child.Id) ? "\u2605" : "\u2606")
                             </button>
                         </h3>
                         @if (child.Children.Any())
@@ -72,7 +73,7 @@ else
                             <ul class="card-doc-list">
                                 @foreach (var doc in child.Documents.OrderBy(d => d.SortOrder))
                                 {
-                                    <li @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, doc.IsFavorited, false, null, CategoryType.WebSop, ItemKind.Document)"
+                                    <li @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, IsDocFavorited(doc.Id), false, null, CategoryType.WebSop, ItemKind.Document)"
                                         @oncontextmenu:preventDefault="true"
                                         @oncontextmenu:stopPropagation="true">
                                         <a href="websops/@doc.Id">@doc.Title</a>
@@ -86,14 +87,14 @@ else
                 @foreach (var doc in category.Documents.OrderBy(d => d.SortOrder))
                 {
                     <div class="category-card category-card-doc"
-                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, doc.IsFavorited, false, null, CategoryType.WebSop, ItemKind.Document)"
+                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, IsDocFavorited(doc.Id), false, null, CategoryType.WebSop, ItemKind.Document)"
                          @oncontextmenu:preventDefault="true">
                         <h3>
                             <a href="websops/@doc.Id" class="category-heading-link">@doc.Title</a>
-                            <button class="btn-star @(doc.IsFavorited ? "starred" : "")"
-                                    title="@(doc.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                            <button class="btn-star @(IsDocFavorited(doc.Id) ? "starred" : "")"
+                                    title="@(IsDocFavorited(doc.Id) ? "Remove from favorites" : "Add to favorites")"
                                     @onclick="() => ToggleDocumentFavorite(doc)">
-                                @(doc.IsFavorited ? "\u2605" : "\u2606")
+                                @(IsDocFavorited(doc.Id) ? "\u2605" : "\u2606")
                             </button>
                         </h3>
                     </div>
@@ -112,6 +113,14 @@ else
     private Category? category;
     private List<(int Id, string Name)> breadcrumbs = [];
     private bool _needsLoad;
+
+    private Dictionary<int, UserPreference> catPrefs = new();
+    private Dictionary<int, UserPreference> docPrefs = new();
+    private bool IsCatFavorited(int id) => catPrefs.TryGetValue(id, out var p) && p.IsFavorited;
+    private bool IsCatPinned(int id) => catPrefs.TryGetValue(id, out var p) && p.IsPinned;
+    private string? GetCatColor(int id) => catPrefs.TryGetValue(id, out var p) ? p.Color : null;
+    private bool IsDocFavorited(int id) => docPrefs.TryGetValue(id, out var p) && p.IsFavorited;
+
     protected override void OnInitialized()
     {
         MenuState.OnCategoryModified += RefreshData;
@@ -143,6 +152,8 @@ else
                 category = await Cache.FindWebSopCategoryAsync(Id);
                 if (category is not null)
                     breadcrumbs = await Cache.GetWebSopBreadcrumbsAsync(Id);
+                catPrefs = await Cache.GetWebSopCategoryPrefsAsync();
+                docPrefs = await Cache.GetWebSopDocPrefsAsync();
             }, _cts.Token);
             StateHasChanged();
         }
@@ -159,6 +170,8 @@ else
                 category = await Cache.FindWebSopCategoryAsync(Id);
                 if (category is not null)
                     breadcrumbs = await Cache.GetWebSopBreadcrumbsAsync(Id);
+                catPrefs = await Cache.GetWebSopCategoryPrefsAsync();
+                docPrefs = await Cache.GetWebSopDocPrefsAsync();
             }, _cts.Token);
             await InvokeAsync(StateHasChanged);
         }
@@ -176,12 +189,14 @@ else
 
     private async Task ToggleCategoryFavorite(Category cat)
     {
-        cat.IsFavorited = await Cache.RunExclusiveAsync(() => WebSopService.ToggleCategoryFavoriteAsync(cat.Id));
+        await Cache.RunExclusiveAsync(() => Prefs.ToggleFavoriteAsync(nameof(Category), cat.Id));
+        catPrefs = await Cache.GetWebSopCategoryPrefsAsync();
     }
 
     private async Task ToggleDocumentFavorite(SopDocument doc)
     {
-        doc.IsFavorited = await Cache.RunExclusiveAsync(() => WebSopService.ToggleDocumentFavoriteAsync(doc.Id));
+        await Cache.RunExclusiveAsync(() => Prefs.ToggleFavoriteAsync(nameof(SopDocument), doc.Id));
+        docPrefs = await Cache.GetWebSopDocPrefsAsync();
     }
 
     private async Task CreateSubfolder()

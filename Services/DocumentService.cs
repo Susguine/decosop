@@ -190,57 +190,6 @@ public class DocumentService
             .ToListAsync();
     }
 
-    // --- Favorites ---
-
-    public async Task<bool> ToggleCategoryFavoriteAsync(int categoryId)
-    {
-        var cat = await _db.DocumentCategories.FindAsync(categoryId);
-        if (cat is null) return false;
-        cat.IsFavorited = !cat.IsFavorited;
-        await _db.SaveChangesAsync();
-        return cat.IsFavorited;
-    }
-
-    public async Task<bool> ToggleDocumentFavoriteAsync(int documentId)
-    {
-        var doc = await _db.OfficeDocuments.FindAsync(documentId);
-        if (doc is null) return false;
-        doc.IsFavorited = !doc.IsFavorited;
-        await _db.SaveChangesAsync();
-        return doc.IsFavorited;
-    }
-
-    public async Task<bool> ToggleCategoryPinAsync(int categoryId)
-    {
-        var cat = await _db.DocumentCategories.FindAsync(categoryId);
-        if (cat is null) return false;
-        cat.IsPinned = !cat.IsPinned;
-        await _db.SaveChangesAsync();
-        return cat.IsPinned;
-    }
-
-    public async Task SetCategoryColorAsync(int categoryId, string? color)
-    {
-        var cat = await _db.DocumentCategories.FindAsync(categoryId);
-        if (cat is null) return;
-        cat.Color = color;
-        await _db.SaveChangesAsync();
-    }
-
-    public async Task<List<DocumentCategory>> GetFavoriteCategoriesAsync()
-        => await _db.DocumentCategories
-            .Where(c => c.IsFavorited)
-            .OrderByDescending(c => c.IsPinned)
-            .ThenBy(c => c.Name)
-            .ToListAsync();
-
-    public async Task<List<OfficeDocument>> GetFavoriteDocumentsAsync()
-        => await _db.OfficeDocuments
-            .Include(d => d.Category)
-            .Where(d => d.IsFavorited)
-            .OrderBy(d => d.Title)
-            .ToListAsync();
-
     // --- Helpers ---
 
     public string GetFilePath(OfficeDocument doc)

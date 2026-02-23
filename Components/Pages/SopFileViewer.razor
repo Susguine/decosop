@@ -2,6 +2,7 @@
 @using DecoSOP.Services
 @using DecoSOP.Models
 @inject SopFileService SopFileService
+@inject UserPreferenceService Prefs
 @inject DataCacheService Cache
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -21,10 +22,10 @@ else
                 &larr; Back
             </button>
             <span class="sop-breadcrumb">@categoryPath / @document.Title</span>
-            <button class="btn-star btn-star-lg @(document.IsFavorited ? "starred" : "")"
-                    title="@(document.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+            <button class="btn-star btn-star-lg @(isFavorited ? "starred" : "")"
+                    title="@(isFavorited ? "Remove from favorites" : "Add to favorites")"
                     @onclick="ToggleFavorite">
-                @(document.IsFavorited ? "\u2605" : "\u2606")
+                @(isFavorited ? "\u2605" : "\u2606")
             </button>
             <div class="sop-actions">
                 @if (canPreview)
@@ -114,6 +115,7 @@ else
 
     private SopFile? document;
     private string categoryPath = string.Empty;
+    private bool isFavorited;
     private bool showDeleteConfirm;
     private bool converting;
     private bool pdfLoaded;
@@ -130,7 +132,11 @@ else
         pdfLoaded = false;
         converting = false;
         if (document is not null)
+        {
             categoryPath = await Cache.RunExclusiveAsync(() => SopFileService.GetCategoryPathAsync(document.CategoryId));
+            var prefs = await Cache.GetSopFilePrefsAsync();
+            isFavorited = prefs.TryGetValue(Id, out var p) && p.IsFavorited;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -160,7 +166,8 @@ else
     private async Task ToggleFavorite()
     {
         if (document is null) return;
-        document.IsFavorited = await Cache.RunExclusiveAsync(() => SopFileService.ToggleDocumentFavoriteAsync(document.Id));
+        isFavorited = await Cache.RunExclusiveAsync(() => Prefs.ToggleFavoriteAsync(nameof(SopFile), document.Id));
+        Cache.InvalidateSopFavorites();
     }
 
     private async Task PrintDocument()

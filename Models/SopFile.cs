@@ -8,7 +8,6 @@ public class SopFile
     public string StoredFileName { get; set; } = string.Empty;
     public string ContentType { get; set; } = string.Empty;
     public long FileSize { get; set; }
-    public bool IsFavorited { get; set; }
     public int CategoryId { get; set; }
     public SopCategory Category { get; set; } = null!;
     public int SortOrder { get; set; }

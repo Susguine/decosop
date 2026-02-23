@@ -41,6 +41,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"), ServiceLifetime.Scoped);
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ClientIdentityService>();
+builder.Services.AddScoped<UserPreferenceService>();
 builder.Services.AddScoped<WebSopService>();
 builder.Services.AddScoped<SopFileService>();
 builder.Services.AddScoped<DocumentService>();
@@ -224,6 +227,66 @@ using (var scope = app.Services.CreateScope())
                 CREATE UNIQUE INDEX IX_SopFiles_CategoryId_Title ON SopFiles(CategoryId, Title);
                 """;
             await create.ExecuteNonQueryAsync();
+        }
+
+        // Create UserPreferences table if missing (per-machine favorites/pins/colors)
+        using var checkUserPrefs = conn.CreateCommand();
+        checkUserPrefs.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='UserPreferences'";
+        var userPrefsExists = await checkUserPrefs.ExecuteScalarAsync();
+        if (userPrefsExists is null)
+        {
+            using var create = conn.CreateCommand();
+            create.CommandText = """
+                CREATE TABLE UserPreferences (
+                    Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    ClientId TEXT NOT NULL DEFAULT '',
+                    EntityType TEXT NOT NULL DEFAULT '',
+                    EntityId INTEGER NOT NULL DEFAULT 0,
+                    IsFavorited INTEGER NOT NULL DEFAULT 0,
+                    IsPinned INTEGER NOT NULL DEFAULT 0,
+                    Color TEXT
+                );
+                CREATE UNIQUE INDEX IX_UserPreferences_Client_Entity
+                    ON UserPreferences(ClientId, EntityType, EntityId);
+                CREATE INDEX IX_UserPreferences_Client_Type_Fav
+                    ON UserPreferences(ClientId, EntityType, IsFavorited);
+                """;
+            await create.ExecuteNonQueryAsync();
+
+            // Migrate existing favorites/pins/colors from entity tables to UserPreferences
+            var migrations = new[]
+            {
+                ("Categories", "Category", true),
+                ("SopCategories", "SopCategory", true),
+                ("DocumentCategories", "DocumentCategory", true),
+                ("WebDocCategories", "WebDocCategory", true),
+                ("Documents", "SopDocument", false),
+                ("SopFiles", "SopFile", false),
+                ("OfficeDocuments", "OfficeDocument", false),
+                ("WebDocuments", "WebDocument", false),
+            };
+
+            foreach (var (table, entityType, hasPinColor) in migrations)
+            {
+                using var migrate = conn.CreateCommand();
+                if (hasPinColor)
+                {
+                    migrate.CommandText = $@"
+                        INSERT INTO UserPreferences (ClientId, EntityType, EntityId, IsFavorited, IsPinned, Color)
+                        SELECT 'legacy-migrated', '{entityType}', Id, IsFavorited, IsPinned, Color
+                        FROM {table}
+                        WHERE IsFavorited = 1 OR IsPinned = 1 OR Color IS NOT NULL";
+                }
+                else
+                {
+                    migrate.CommandText = $@"
+                        INSERT INTO UserPreferences (ClientId, EntityType, EntityId, IsFavorited, IsPinned, Color)
+                        SELECT 'legacy-migrated', '{entityType}', Id, IsFavorited, 0, NULL
+                        FROM {table}
+                        WHERE IsFavorited = 1";
+                }
+                await migrate.ExecuteNonQueryAsync();
+            }
         }
 
         // Seed WebDocCategories from DocumentCategories (full tree)

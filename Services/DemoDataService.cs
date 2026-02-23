@@ -20,9 +20,9 @@ public static class DemoDataService
 
         // === SOP Categories & Documents ===
 
-        var onboarding = new Category { Name = "Onboarding", SortOrder = 0, IsFavorited = true, Color = "blue" };
-        var safety = new Category { Name = "Safety Procedures", SortOrder = 1, IsPinned = true, Color = "red" };
-        var itPolicies = new Category { Name = "IT Policies", SortOrder = 2, Color = "purple" };
+        var onboarding = new Category { Name = "Onboarding", SortOrder = 0 };
+        var safety = new Category { Name = "Safety Procedures", SortOrder = 1 };
+        var itPolicies = new Category { Name = "IT Policies", SortOrder = 2 };
         var hr = new Category { Name = "HR", SortOrder = 3 };
 
         db.Categories.AddRange(onboarding, safety, itPolicies, hr);
@@ -37,7 +37,7 @@ public static class DemoDataService
             },
             new SopDocument
             {
-                CategoryId = onboarding.Id, Title = "IT Account Setup Guide", SortOrder = 1, IsFavorited = true,
+                CategoryId = onboarding.Id, Title = "IT Account Setup Guide", SortOrder = 1,
                 HtmlContent = "<h1>IT Account Setup Guide</h1><h2>Required Accounts</h2><ol><li><strong>Email</strong> &mdash; Submit request to IT Help Desk with employee name and department</li><li><strong>Network Login</strong> &mdash; Created automatically from HR system</li><li><strong>VPN Access</strong> &mdash; Required for remote work; submit VPN request form</li></ol><h2>Software Installation</h2><p>Standard workstation image includes Office suite, PDF reader, and web browser. Additional software requires manager approval via the Software Request Form.</p>"
             },
             new SopDocument
@@ -88,26 +88,26 @@ public static class DemoDataService
 
         // === SOP File Categories (empty, for uploaded SOP files) ===
 
-        var procedures = new SopCategory { Name = "Procedures", SortOrder = 0, Color = "orange" };
-        var formsTemplates = new SopCategory { Name = "Forms & Templates", SortOrder = 1, Color = "yellow" };
-        var complianceDocs = new SopCategory { Name = "Compliance", SortOrder = 2, IsFavorited = true };
+        var procedures = new SopCategory { Name = "Procedures", SortOrder = 0 };
+        var formsTemplates = new SopCategory { Name = "Forms & Templates", SortOrder = 1 };
+        var complianceDocs = new SopCategory { Name = "Compliance", SortOrder = 2 };
 
         db.SopCategories.AddRange(procedures, formsTemplates, complianceDocs);
         await db.SaveChangesAsync();
 
         // === Document Categories (empty, for uploaded files) ===
 
-        var forms = new DocumentCategory { Name = "Forms", SortOrder = 0, Color = "green" };
-        var templates = new DocumentCategory { Name = "Templates", SortOrder = 1, Color = "orange" };
-        var references = new DocumentCategory { Name = "References", SortOrder = 2, IsFavorited = true };
+        var forms = new DocumentCategory { Name = "Forms", SortOrder = 0 };
+        var templates = new DocumentCategory { Name = "Templates", SortOrder = 1 };
+        var references = new DocumentCategory { Name = "References", SortOrder = 2 };
 
         db.DocumentCategories.AddRange(forms, templates, references);
         await db.SaveChangesAsync();
 
         // === Web Doc Categories & Documents ===
 
-        var trainingGuides = new WebDocCategory { Name = "Training Guides", SortOrder = 0, Color = "teal", IsFavorited = true };
-        var quickRefs = new WebDocCategory { Name = "Quick References", SortOrder = 1, IsPinned = true };
+        var trainingGuides = new WebDocCategory { Name = "Training Guides", SortOrder = 0 };
+        var quickRefs = new WebDocCategory { Name = "Quick References", SortOrder = 1 };
 
         db.WebDocCategories.AddRange(trainingGuides, quickRefs);
         await db.SaveChangesAsync();
@@ -125,7 +125,7 @@ public static class DemoDataService
             },
             new WebDocument
             {
-                CategoryId = quickRefs.Id, Title = "Wi-Fi Connection", SortOrder = 0, IsFavorited = true,
+                CategoryId = quickRefs.Id, Title = "Wi-Fi Connection", SortOrder = 0,
                 HtmlContent = "<h1>Wi-Fi Connection</h1><h2>Corporate Network</h2><ul><li><strong>SSID:</strong> CorpNet-Secure</li><li><strong>Authentication:</strong> Use your network login credentials</li></ul><h2>Guest Network</h2><ul><li><strong>SSID:</strong> CorpNet-Guest</li><li><strong>Password:</strong> Posted at reception (rotates weekly)</li></ul><p>The guest network has limited bandwidth and no access to internal resources.</p>"
             },
             new WebDocument

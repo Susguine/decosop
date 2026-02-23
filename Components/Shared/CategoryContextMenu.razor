@@ -1,5 +1,7 @@
 @using DecoSOP.Services
+@using DecoSOP.Models
 @inject ContextMenuState MenuState
+@inject UserPreferenceService Prefs
 @inject SopFileService SopFileService
 @inject WebSopService WebSopService
 @inject DocumentService DocService
@@ -92,61 +94,44 @@
     [JSInvokable]
     public void CloseMenu() => MenuState.Hide();
 
+    private string GetEntityType() => (MenuState.Type, MenuState.Kind) switch
+    {
+        (CategoryType.Sop, ItemKind.Category) => nameof(SopCategory),
+        (CategoryType.Sop, ItemKind.Document) => nameof(SopFile),
+        (CategoryType.WebSop, ItemKind.Category) => nameof(Category),
+        (CategoryType.WebSop, ItemKind.Document) => nameof(SopDocument),
+        (CategoryType.Document, ItemKind.Category) => nameof(DocumentCategory),
+        (CategoryType.Document, ItemKind.Document) => nameof(OfficeDocument),
+        (CategoryType.WebDoc, ItemKind.Category) => nameof(WebDocCategory),
+        (CategoryType.WebDoc, ItemKind.Document) => nameof(WebDocument),
+        _ => throw new InvalidOperationException()
+    };
+
     private async Task ToggleFavorite()
     {
-        if (MenuState.Kind == ItemKind.Document)
-        {
-            if (MenuState.Type == CategoryType.Sop)
-                await Cache.RunExclusiveAsync(() => SopFileService.ToggleDocumentFavoriteAsync(MenuState.ItemId));
-            else if (MenuState.Type == CategoryType.WebSop)
-                await Cache.RunExclusiveAsync(() => WebSopService.ToggleDocumentFavoriteAsync(MenuState.ItemId));
-            else if (MenuState.Type == CategoryType.Document)
-                await Cache.RunExclusiveAsync(() => DocService.ToggleDocumentFavoriteAsync(MenuState.ItemId));
-            else
-                await Cache.RunExclusiveAsync(() => WebDocService.ToggleDocumentFavoriteAsync(MenuState.ItemId));
-        }
-        else
-        {
-            if (MenuState.Type == CategoryType.Sop)
-                await Cache.RunExclusiveAsync(() => SopFileService.ToggleCategoryFavoriteAsync(MenuState.ItemId));
-            else if (MenuState.Type == CategoryType.WebSop)
-                await Cache.RunExclusiveAsync(() => WebSopService.ToggleCategoryFavoriteAsync(MenuState.ItemId));
-            else if (MenuState.Type == CategoryType.Document)
-                await Cache.RunExclusiveAsync(() => DocService.ToggleCategoryFavoriteAsync(MenuState.ItemId));
-            else
-                await Cache.RunExclusiveAsync(() => WebDocService.ToggleCategoryFavoriteAsync(MenuState.ItemId));
-        }
-
+        var entityType = GetEntityType();
+        await Cache.RunExclusiveAsync(() => Prefs.ToggleFavoriteAsync(entityType, MenuState.ItemId));
         MenuState.Hide();
+        Cache.InvalidateAll();
         await MenuState.NotifyCategoryModified();
     }
 
     private async Task TogglePin()
     {
-        if (MenuState.Type == CategoryType.Sop)
-            await Cache.RunExclusiveAsync(() => SopFileService.ToggleCategoryPinAsync(MenuState.ItemId));
-        else if (MenuState.Type == CategoryType.WebSop)
-            await Cache.RunExclusiveAsync(() => WebSopService.ToggleCategoryPinAsync(MenuState.ItemId));
-        else if (MenuState.Type == CategoryType.Document)
-            await Cache.RunExclusiveAsync(() => DocService.ToggleCategoryPinAsync(MenuState.ItemId));
-        else
-            await Cache.RunExclusiveAsync(() => WebDocService.ToggleCategoryPinAsync(MenuState.ItemId));
-
+        var entityType = GetEntityType();
+        await Cache.RunExclusiveAsync(() => Prefs.TogglePinAsync(entityType, MenuState.ItemId));
         MenuState.Hide();
+        Cache.InvalidateAll();
+        await MenuState.NotifyCategoryModified();
     }
 
     private async Task SetColor(string? color)
     {
-        if (MenuState.Type == CategoryType.Sop)
-            await Cache.RunExclusiveAsync(() => SopFileService.SetCategoryColorAsync(MenuState.ItemId, color));
-        else if (MenuState.Type == CategoryType.WebSop)
-            await Cache.RunExclusiveAsync(() => WebSopService.SetCategoryColorAsync(MenuState.ItemId, color));
-        else if (MenuState.Type == CategoryType.Document)
-            await Cache.RunExclusiveAsync(() => DocService.SetCategoryColorAsync(MenuState.ItemId, color));
-        else
-            await Cache.RunExclusiveAsync(() => WebDocService.SetCategoryColorAsync(MenuState.ItemId, color));
-
+        var entityType = GetEntityType();
+        await Cache.RunExclusiveAsync(() => Prefs.SetColorAsync(entityType, MenuState.ItemId, color));
         MenuState.Hide();
+        Cache.InvalidateAll();
+        await MenuState.NotifyCategoryModified();
     }
 
     private async Task Rename()

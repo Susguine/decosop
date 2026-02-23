@@ -2,6 +2,7 @@
 @using DecoSOP.Services
 @using DecoSOP.Models
 @inject WebSopService WebSopService
+@inject UserPreferenceService Prefs
 @inject DataCacheService Cache
 @inject NavigationManager Nav
 @rendermode InteractiveServer
@@ -18,10 +19,10 @@ else
     <div class="sop-viewer">
         <div class="sop-toolbar">
             <span class="sop-breadcrumb">@categoryPath / @document.Title</span>
-            <button class="btn-star btn-star-lg @(document.IsFavorited ? "starred" : "")"
-                    title="@(document.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+            <button class="btn-star btn-star-lg @(isFavorited ? "starred" : "")"
+                    title="@(isFavorited ? "Remove from favorites" : "Add to favorites")"
                     @onclick="ToggleFavorite">
-                @(document.IsFavorited ? "\u2605" : "\u2606")
+                @(isFavorited ? "\u2605" : "\u2606")
             </button>
             <div class="sop-actions">
                 <button class="btn btn-sm btn-outline-primary" @onclick="Edit">Edit</button>
@@ -53,19 +54,25 @@ else
 
     private SopDocument? document;
     private string categoryPath = string.Empty;
+    private bool isFavorited;
     private bool showDeleteConfirm;
 
     protected override async Task OnParametersSetAsync()
     {
         document = await Cache.RunExclusiveAsync(() => WebSopService.GetDocumentAsync(Id));
         if (document is not null)
+        {
             categoryPath = await Cache.RunExclusiveAsync(() => WebSopService.GetCategoryPathAsync(document.CategoryId));
+            var prefs = await Cache.GetWebSopDocPrefsAsync();
+            isFavorited = prefs.TryGetValue(Id, out var p) && p.IsFavorited;
+        }
     }
 
     private async Task ToggleFavorite()
     {
         if (document is null) return;
-        document.IsFavorited = await Cache.RunExclusiveAsync(() => WebSopService.ToggleDocumentFavoriteAsync(document.Id));
+        isFavorited = await Cache.RunExclusiveAsync(() => Prefs.ToggleFavoriteAsync(nameof(SopDocument), document.Id));
+        Cache.InvalidateWebSopFavorites();
     }
 
     private void Edit() => Nav.NavigateTo($"/websops/{Id}/edit");

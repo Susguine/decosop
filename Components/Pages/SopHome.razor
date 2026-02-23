@@ -3,6 +3,7 @@
 @using DecoSOP.Services
 @using DecoSOP.Models
 @inject SopFileService SopFileService
+@inject UserPreferenceService Prefs
 @inject DataCacheService Cache
 @inject ContextMenuState MenuState
 @inject IJSRuntime JS
@@ -22,13 +23,13 @@
             <div class="category-grid">
                 @foreach (var cat in favoriteCategories)
                 {
-                    <div class="category-card @(cat.Color is not null ? $"card-color-{cat.Color}" : "")"
-                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, cat.Id, cat.Name, cat.IsFavorited, cat.IsPinned, cat.Color, CategoryType.Sop)"
+                    <div class="category-card @(GetCatColor(cat.Id) is string c ? $"card-color-{c}" : "")"
+                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, cat.Id, cat.Name, IsCatFavorited(cat.Id), IsCatPinned(cat.Id), GetCatColor(cat.Id), CategoryType.Sop)"
                          @oncontextmenu:preventDefault="true">
                         <h3>
-                            <FolderIcon Color="@cat.Color" />
+                            <FolderIcon Color="@GetCatColor(cat.Id)" />
                             <a href="sops/category/@cat.Id" class="category-heading-link">@cat.Name</a>
-                            @if (cat.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }
+                            @if (IsCatPinned(cat.Id)) { <span class="pin-icon" title="Pinned">&#128204;</span> }
                             <button class="btn-star starred" title="Remove from favorites"
                                     @onclick="() => ToggleCategoryFavorite(cat)">&#9733;</button>
                         </h3>
@@ -37,7 +38,7 @@
                 @foreach (var doc in favoriteDocuments)
                 {
                     <div class="category-card category-card-doc"
-                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, doc.IsFavorited, false, null, CategoryType.Sop, ItemKind.Document)"
+                         @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, IsDocFavorited(doc.Id), false, null, CategoryType.Sop, ItemKind.Document)"
                          @oncontextmenu:preventDefault="true">
                         <h3>
                             <a href="sops/@doc.Id" class="category-heading-link">@doc.Title</a>
@@ -59,21 +60,21 @@
     else
     {
         <div class="category-grid">
-            @foreach (var category in categories.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+            @foreach (var category in categories.OrderByDescending(c => IsCatPinned(c.Id)).ThenBy(c => c.Name))
             {
                 var totalCount = GetTotalDocCount(category);
-                <div class="category-card @(category.Color is not null ? $"card-color-{category.Color}" : "")"
-                     @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, category.IsFavorited, category.IsPinned, category.Color, CategoryType.Sop)"
+                <div class="category-card @(GetCatColor(category.Id) is string c ? $"card-color-{c}" : "")"
+                     @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, IsCatFavorited(category.Id), IsCatPinned(category.Id), GetCatColor(category.Id), CategoryType.Sop)"
                      @oncontextmenu:preventDefault="true">
                     <h3>
-                        <FolderIcon Color="@category.Color" />
+                        <FolderIcon Color="@GetCatColor(category.Id)" />
                         <a href="sops/category/@category.Id" class="category-heading-link">@category.Name</a>
                         <span class="text-muted small">(@totalCount)</span>
-                        @if (category.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }
-                        <button class="btn-star @(category.IsFavorited ? "starred" : "")"
-                                title="@(category.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+                        @if (IsCatPinned(category.Id)) { <span class="pin-icon" title="Pinned">&#128204;</span> }
+                        <button class="btn-star @(IsCatFavorited(category.Id) ? "starred" : "")"
+                                title="@(IsCatFavorited(category.Id) ? "Remove from favorites" : "Add to favorites")"
                                 @onclick="() => ToggleCategoryFavorite(category)">
-                            @(category.IsFavorited ? "\u2605" : "\u2606")
+                            @(IsCatFavorited(category.Id) ? "\u2605" : "\u2606")
                         </button>
                     </h3>
                     @if (category.Children.Any())
@@ -85,7 +86,7 @@
                         <ul class="card-doc-list">
                             @foreach (var doc in category.Documents.OrderBy(d => d.SortOrder))
                             {
-                                <li @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, doc.IsFavorited, false, null, CategoryType.Sop, ItemKind.Document)"
+                                <li @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, doc.Id, doc.Title, IsDocFavorited(doc.Id), false, null, CategoryType.Sop, ItemKind.Document)"
                                     @oncontextmenu:preventDefault="true"
                                     @oncontextmenu:stopPropagation="true">
                                     <a href="sops/@doc.Id">@doc.Title</a>
@@ -113,8 +114,16 @@
     private List<SopCategory>? categories;
     private List<SopCategory> favoriteCategories = [];
     private List<SopFile> favoriteDocuments = [];
+    private Dictionary<int, UserPreference> catPrefs = new();
+    private Dictionary<int, UserPreference> docPrefs = new();
     private bool hasFavorites => favoriteCategories.Count > 0 || favoriteDocuments.Count > 0;
     private int totalDocCount => categories?.Sum(c => GetTotalDocCount(c)) ?? 0;
+
+    private bool IsCatFavorited(int id) => catPrefs.TryGetValue(id, out var p) && p.IsFavorited;
+    private bool IsCatPinned(int id) => catPrefs.TryGetValue(id, out var p) && p.IsPinned;
+    private string? GetCatColor(int id) => catPrefs.TryGetValue(id, out var p) ? p.Color : null;
+    private bool IsDocFavorited(int id) => docPrefs.TryGetValue(id, out var p) && p.IsFavorited;
+
     protected override void OnInitialized()
     {
         MenuState.OnCategoryModified += RefreshData;
@@ -137,6 +146,8 @@
                 categories = await Cache.GetSopTreeAsync();
                 favoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
                 favoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+                catPrefs = await Cache.GetSopCategoryPrefsAsync();
+                docPrefs = await Cache.GetSopFilePrefsAsync();
             }, _cts.Token);
             StateHasChanged();
         }
@@ -153,6 +164,8 @@
                 categories = await Cache.GetSopTreeAsync();
                 favoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
                 favoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+                catPrefs = await Cache.GetSopCategoryPrefsAsync();
+                docPrefs = await Cache.GetSopFilePrefsAsync();
             }, _cts.Token);
             await InvokeAsync(StateHasChanged);
         }
@@ -170,18 +183,20 @@
 
     private async Task ToggleCategoryFavorite(SopCategory cat)
     {
-        cat.IsFavorited = await Cache.RunExclusiveAsync(() => SopFileService.ToggleCategoryFavoriteAsync(cat.Id));
+        await Cache.RunExclusiveAsync(() => Prefs.ToggleFavoriteAsync(nameof(SopCategory), cat.Id));
         Cache.InvalidateSopFavorites();
         favoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
         favoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+        catPrefs = await Cache.GetSopCategoryPrefsAsync();
     }
 
     private async Task ToggleDocumentFavorite(SopFile doc)
     {
-        doc.IsFavorited = await Cache.RunExclusiveAsync(() => SopFileService.ToggleDocumentFavoriteAsync(doc.Id));
+        await Cache.RunExclusiveAsync(() => Prefs.ToggleFavoriteAsync(nameof(SopFile), doc.Id));
         Cache.InvalidateSopFavorites();
         favoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
         favoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+        docPrefs = await Cache.GetSopFilePrefsAsync();
     }
 
     private async Task CreateFolder()

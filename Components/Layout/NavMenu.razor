@@ -7,6 +7,7 @@
 @inject WebDocService WebDocService
 @inject NavigationManager Nav
 @inject ContextMenuState MenuState
+@inject UserPreferenceService Prefs
 @implements IDisposable
 
 <div class="top-row ps-3 navbar navbar-dark">
@@ -57,7 +58,7 @@
                     {
                         <div class="nav-item px-3">
                             <NavLink class="nav-link" href="@($"sops/category/{cat.Id}")">
-                                <FolderIcon Color="@cat.Color" />@cat.Name
+                                <FolderIcon Color="@GetSopCatColor(cat.Id)" />@cat.Name
                                 <span class="nav-category-hint">folder</span>
                             </NavLink>
                         </div>
@@ -84,7 +85,7 @@
                     {
                         <div class="nav-item px-3">
                             <NavLink class="nav-link" href="@($"websops/category/{cat.Id}")">
-                                <FolderIcon Color="@cat.Color" />@cat.Name
+                                <FolderIcon Color="@GetWebSopCatColor(cat.Id)" />@cat.Name
                                 <span class="nav-category-hint">folder</span>
                             </NavLink>
                         </div>
@@ -111,7 +112,7 @@
                     {
                         <div class="nav-item px-3">
                             <NavLink class="nav-link" href="@($"documents/category/{cat.Id}")">
-                                <FolderIcon Color="@cat.Color" />@cat.Name
+                                <FolderIcon Color="@GetDocCatColor(cat.Id)" />@cat.Name
                                 <span class="nav-category-hint">folder</span>
                             </NavLink>
                         </div>
@@ -138,7 +139,7 @@
                     {
                         <div class="nav-item px-3">
                             <NavLink class="nav-link" href="@($"webdocs/category/{cat.Id}")">
-                                <FolderIcon Color="@cat.Color" />@cat.Name
+                                <FolderIcon Color="@GetWebDocCatColor(cat.Id)" />@cat.Name
                                 <span class="nav-category-hint">folder</span>
                             </NavLink>
                         </div>
@@ -264,7 +265,7 @@
                     {
                         <div class="nav-item px-3">
                             <NavLink class="nav-link" href="@($"sops/category/{cat.Id}")">
-                                <FolderIcon Color="@cat.Color" />@cat.Name
+                                <FolderIcon Color="@GetSopCatColor(cat.Id)" />@cat.Name
                                 <span class="nav-category-hint">folder</span>
                             </NavLink>
                         </div>
@@ -285,7 +286,7 @@
                     {
                         <div class="nav-item px-3">
                             <NavLink class="nav-link" href="@($"websops/category/{cat.Id}")">
-                                <FolderIcon Color="@cat.Color" />@cat.Name
+                                <FolderIcon Color="@GetWebSopCatColor(cat.Id)" />@cat.Name
                                 <span class="nav-category-hint">folder</span>
                             </NavLink>
                         </div>
@@ -306,7 +307,7 @@
                     {
                         <div class="nav-item px-3">
                             <NavLink class="nav-link" href="@($"documents/category/{cat.Id}")">
-                                <FolderIcon Color="@cat.Color" />@cat.Name
+                                <FolderIcon Color="@GetDocCatColor(cat.Id)" />@cat.Name
                                 <span class="nav-category-hint">folder</span>
                             </NavLink>
                         </div>
@@ -327,7 +328,7 @@
                     {
                         <div class="nav-item px-3">
                             <NavLink class="nav-link" href="@($"webdocs/category/{cat.Id}")">
-                                <FolderIcon Color="@cat.Color" />@cat.Name
+                                <FolderIcon Color="@GetWebDocCatColor(cat.Id)" />@cat.Name
                                 <span class="nav-category-hint">folder</span>
                             </NavLink>
                         </div>
@@ -366,28 +367,28 @@
             }
             else if (currentMode == "sop")
             {
-                @foreach (var category in sopCategories!.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+                @foreach (var category in sopCategories!.OrderByDescending(c => IsSopCatPinned(c.Id)).ThenBy(c => c.Name))
                 {
                     @RenderSopCategoryTree(category, 0)
                 }
             }
             else if (currentMode == "websop")
             {
-                @foreach (var category in webSopCategories!.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+                @foreach (var category in webSopCategories!.OrderByDescending(c => IsWebSopCatPinned(c.Id)).ThenBy(c => c.Name))
                 {
                     @RenderWebSopCategoryTree(category, 0)
                 }
             }
             else if (currentMode == "doc")
             {
-                @foreach (var category in docCategories!.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+                @foreach (var category in docCategories!.OrderByDescending(c => IsDocCatPinned(c.Id)).ThenBy(c => c.Name))
                 {
                     @RenderDocCategoryTree(category, 0)
                 }
             }
             else
             {
-                @foreach (var category in webDocCategories!.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+                @foreach (var category in webDocCategories!.OrderByDescending(c => IsWebDocCatPinned(c.Id)).ThenBy(c => c.Name))
                 {
                     @RenderWebDocCategoryTree(category, 0)
                 }
@@ -427,6 +428,28 @@
     private List<WebDocCategory> webDocFavoriteCategories = [];
     private List<WebDocument> webDocFavoriteDocuments = [];
     private List<WebDocument> webDocSearchResults = [];
+
+    // --- Per-user preference dictionaries ---
+    private Dictionary<int, UserPreference> sopCatPrefs = new();
+    private Dictionary<int, UserPreference> webSopCatPrefs = new();
+    private Dictionary<int, UserPreference> docCatPrefs = new();
+    private Dictionary<int, UserPreference> webDocCatPrefs = new();
+
+    private bool IsSopCatFavorited(int id) => sopCatPrefs.TryGetValue(id, out var p) && p.IsFavorited;
+    private bool IsSopCatPinned(int id) => sopCatPrefs.TryGetValue(id, out var p) && p.IsPinned;
+    private string? GetSopCatColor(int id) => sopCatPrefs.TryGetValue(id, out var p) ? p.Color : null;
+
+    private bool IsWebSopCatFavorited(int id) => webSopCatPrefs.TryGetValue(id, out var p) && p.IsFavorited;
+    private bool IsWebSopCatPinned(int id) => webSopCatPrefs.TryGetValue(id, out var p) && p.IsPinned;
+    private string? GetWebSopCatColor(int id) => webSopCatPrefs.TryGetValue(id, out var p) ? p.Color : null;
+
+    private bool IsDocCatFavorited(int id) => docCatPrefs.TryGetValue(id, out var p) && p.IsFavorited;
+    private bool IsDocCatPinned(int id) => docCatPrefs.TryGetValue(id, out var p) && p.IsPinned;
+    private string? GetDocCatColor(int id) => docCatPrefs.TryGetValue(id, out var p) ? p.Color : null;
+
+    private bool IsWebDocCatFavorited(int id) => webDocCatPrefs.TryGetValue(id, out var p) && p.IsFavorited;
+    private bool IsWebDocCatPinned(int id) => webDocCatPrefs.TryGetValue(id, out var p) && p.IsPinned;
+    private string? GetWebDocCatColor(int id) => webDocCatPrefs.TryGetValue(id, out var p) ? p.Color : null;
 
     // --- Shared state ---
     private HashSet<int> expandedSopCategories = [];
@@ -598,27 +621,35 @@
                 docFavoriteDocuments = await Cache.GetDocFavoriteDocumentsAsync();
                 webDocFavoriteCategories = await Cache.GetWebDocFavoriteCategoriesAsync();
                 webDocFavoriteDocuments = await Cache.GetWebDocFavoriteDocumentsAsync();
+                sopCatPrefs = await Cache.GetSopCategoryPrefsAsync();
+                webSopCatPrefs = await Cache.GetWebSopCategoryPrefsAsync();
+                docCatPrefs = await Cache.GetDocCategoryPrefsAsync();
+                webDocCatPrefs = await Cache.GetWebDocCategoryPrefsAsync();
                 _favoritesLoaded = true;
                 break;
             case "websop":
                 webSopCategories = await Cache.GetWebSopTreeAsync();
                 webSopFavoriteCategories = await Cache.GetWebSopFavoriteCategoriesAsync();
                 webSopFavoriteDocuments = await Cache.GetWebSopFavoriteDocumentsAsync();
+                webSopCatPrefs = await Cache.GetWebSopCategoryPrefsAsync();
                 break;
             case "doc":
                 docCategories = await Cache.GetDocTreeAsync();
                 docFavoriteCategories = await Cache.GetDocFavoriteCategoriesAsync();
                 docFavoriteDocuments = await Cache.GetDocFavoriteDocumentsAsync();
+                docCatPrefs = await Cache.GetDocCategoryPrefsAsync();
                 break;
             case "webdoc":
                 webDocCategories = await Cache.GetWebDocTreeAsync();
                 webDocFavoriteCategories = await Cache.GetWebDocFavoriteCategoriesAsync();
                 webDocFavoriteDocuments = await Cache.GetWebDocFavoriteDocumentsAsync();
+                webDocCatPrefs = await Cache.GetWebDocCategoryPrefsAsync();
                 break;
             default:
                 sopCategories = await Cache.GetSopTreeAsync();
                 sopFavoriteCategories = await Cache.GetSopFavoriteCategoriesAsync();
                 sopFavoriteDocuments = await Cache.GetSopFavoriteDocumentsAsync();
+                sopCatPrefs = await Cache.GetSopCategoryPrefsAsync();
                 break;
         }
     }
@@ -648,18 +679,18 @@
         var totalCount = GetSopDocCount(category);
 
         <div class="nav-section" style="padding-left: @paddingLeft;"
-             @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, category.IsFavorited, category.IsPinned, category.Color, CategoryType.Sop)"
+             @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, IsSopCatFavorited(category.Id), IsSopCatPinned(category.Id), GetSopCatColor(category.Id), CategoryType.Sop)"
              @oncontextmenu:preventDefault="true">
             <button class="nav-section-toggle" @onclick="() => ToggleSopCategory(category.Id)">
                 <span class="toggle-icon">@(IsSopExpanded(category.Id) ? "▾" : "▸")</span>
-                <span class="nav-section-title"><FolderIcon Color="@category.Color" />@category.Name@if (category.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }</span>
+                <span class="nav-section-title"><FolderIcon Color="@GetSopCatColor(category.Id)" />@category.Name@if (IsSopCatPinned(category.Id)) { <span class="pin-icon" title="Pinned">&#128204;</span> }</span>
                 <span class="nav-section-count">@totalCount</span>
             </button>
         </div>
 
         @if (IsSopExpanded(category.Id))
         {
-            @foreach (var child in category.Children.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+            @foreach (var child in category.Children.OrderByDescending(c => IsSopCatPinned(c.Id)).ThenBy(c => c.Name))
             {
                 @RenderSopCategoryTree(child, depth + 1)
             }
@@ -706,18 +737,18 @@
         var totalCount = GetWebSopDocCount(category);
 
         <div class="nav-section" style="padding-left: @paddingLeft;"
-             @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, category.IsFavorited, category.IsPinned, category.Color, CategoryType.WebSop)"
+             @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, IsWebSopCatFavorited(category.Id), IsWebSopCatPinned(category.Id), GetWebSopCatColor(category.Id), CategoryType.WebSop)"
              @oncontextmenu:preventDefault="true">
             <button class="nav-section-toggle" @onclick="() => ToggleWebSopCategory(category.Id)">
                 <span class="toggle-icon">@(IsWebSopExpanded(category.Id) ? "▾" : "▸")</span>
-                <span class="nav-section-title"><FolderIcon Color="@category.Color" />@category.Name@if (category.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }</span>
+                <span class="nav-section-title"><FolderIcon Color="@GetWebSopCatColor(category.Id)" />@category.Name@if (IsWebSopCatPinned(category.Id)) { <span class="pin-icon" title="Pinned">&#128204;</span> }</span>
                 <span class="nav-section-count">@totalCount</span>
             </button>
         </div>
 
         @if (IsWebSopExpanded(category.Id))
         {
-            @foreach (var child in category.Children.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+            @foreach (var child in category.Children.OrderByDescending(c => IsWebSopCatPinned(c.Id)).ThenBy(c => c.Name))
             {
                 @RenderWebSopCategoryTree(child, depth + 1)
             }
@@ -764,18 +795,18 @@
         var totalCount = GetDocCount(category);
 
         <div class="nav-section" style="padding-left: @paddingLeft;"
-             @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, category.IsFavorited, category.IsPinned, category.Color, CategoryType.Document)"
+             @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, IsDocCatFavorited(category.Id), IsDocCatPinned(category.Id), GetDocCatColor(category.Id), CategoryType.Document)"
              @oncontextmenu:preventDefault="true">
             <button class="nav-section-toggle" @onclick="() => ToggleDocCategory(category.Id)">
                 <span class="toggle-icon">@(IsDocExpanded(category.Id) ? "▾" : "▸")</span>
-                <span class="nav-section-title"><FolderIcon Color="@category.Color" />@category.Name@if (category.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }</span>
+                <span class="nav-section-title"><FolderIcon Color="@GetDocCatColor(category.Id)" />@category.Name@if (IsDocCatPinned(category.Id)) { <span class="pin-icon" title="Pinned">&#128204;</span> }</span>
                 <span class="nav-section-count">@totalCount</span>
             </button>
         </div>
 
         @if (IsDocExpanded(category.Id))
         {
-            @foreach (var child in category.Children.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+            @foreach (var child in category.Children.OrderByDescending(c => IsDocCatPinned(c.Id)).ThenBy(c => c.Name))
             {
                 @RenderDocCategoryTree(child, depth + 1)
             }
@@ -822,18 +853,18 @@
         var totalCount = GetWebDocCount(category);
 
         <div class="nav-section" style="padding-left: @paddingLeft;"
-             @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, category.IsFavorited, category.IsPinned, category.Color, CategoryType.WebDoc)"
+             @oncontextmenu="(e) => MenuState.Show(e.ClientX, e.ClientY, category.Id, category.Name, IsWebDocCatFavorited(category.Id), IsWebDocCatPinned(category.Id), GetWebDocCatColor(category.Id), CategoryType.WebDoc)"
              @oncontextmenu:preventDefault="true">
             <button class="nav-section-toggle" @onclick="() => ToggleWebDocCategory(category.Id)">
                 <span class="toggle-icon">@(IsWebDocExpanded(category.Id) ? "▾" : "▸")</span>
-                <span class="nav-section-title"><FolderIcon Color="@category.Color" />@category.Name@if (category.IsPinned) { <span class="pin-icon" title="Pinned">&#128204;</span> }</span>
+                <span class="nav-section-title"><FolderIcon Color="@GetWebDocCatColor(category.Id)" />@category.Name@if (IsWebDocCatPinned(category.Id)) { <span class="pin-icon" title="Pinned">&#128204;</span> }</span>
                 <span class="nav-section-count">@totalCount</span>
             </button>
         </div>
 
         @if (IsWebDocExpanded(category.Id))
         {
-            @foreach (var child in category.Children.OrderByDescending(c => c.IsPinned).ThenBy(c => c.Name))
+            @foreach (var child in category.Children.OrderByDescending(c => IsWebDocCatPinned(c.Id)).ThenBy(c => c.Name))
             {
                 @RenderWebDocCategoryTree(child, depth + 1)
             }

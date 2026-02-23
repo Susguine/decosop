@@ -2,6 +2,7 @@
 @using DecoSOP.Services
 @using DecoSOP.Models
 @inject WebDocService WebDocService
+@inject UserPreferenceService Prefs
 @inject DataCacheService Cache
 @inject NavigationManager Nav
 
@@ -16,10 +17,10 @@ else
     <div class="sop-viewer">
         <div class="sop-toolbar">
             <span class="sop-breadcrumb">@categoryPath / @document.Title</span>
-            <button class="btn-star btn-star-lg @(document.IsFavorited ? "starred" : "")"
-                    title="@(document.IsFavorited ? "Remove from favorites" : "Add to favorites")"
+            <button class="btn-star btn-star-lg @(isFavorited ? "starred" : "")"
+                    title="@(isFavorited ? "Remove from favorites" : "Add to favorites")"
                     @onclick="ToggleFavorite">
-                @(document.IsFavorited ? "\u2605" : "\u2606")
+                @(isFavorited ? "\u2605" : "\u2606")
             </button>
             <div class="sop-actions">
                 <button class="btn btn-sm btn-outline-primary" @onclick="Edit">Edit</button>
@@ -51,19 +52,25 @@ else
 
     private WebDocument? document;
     private string categoryPath = string.Empty;
+    private bool isFavorited;
     private bool showDeleteConfirm;
 
     protected override async Task OnParametersSetAsync()
     {
         document = await Cache.RunExclusiveAsync(() => WebDocService.GetDocumentAsync(Id));
         if (document is not null)
+        {
             categoryPath = await Cache.RunExclusiveAsync(() => WebDocService.GetCategoryPathAsync(document.CategoryId));
+            var prefs = await Cache.GetWebDocDocPrefsAsync();
+            isFavorited = prefs.TryGetValue(Id, out var p) && p.IsFavorited;
+        }
     }
 
     private async Task ToggleFavorite()
     {
         if (document is null) return;
-        document.IsFavorited = await Cache.RunExclusiveAsync(() => WebDocService.ToggleDocumentFavoriteAsync(document.Id));
+        isFavorited = await Cache.RunExclusiveAsync(() => Prefs.ToggleFavoriteAsync(nameof(WebDocument), document.Id));
+        Cache.InvalidateWebDocFavorites();
     }
 
     private void Edit() => Nav.NavigateTo($"/webdocs/{Id}/edit");

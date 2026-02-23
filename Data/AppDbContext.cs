@@ -15,9 +15,16 @@ public class AppDbContext : DbContext
     public DbSet<WebDocument> WebDocuments => Set<WebDocument>();
     public DbSet<SopCategory> SopCategories => Set<SopCategory>();
     public DbSet<SopFile> SopFiles => Set<SopFile>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<UserPreference>(e =>
+        {
+            e.HasIndex(p => new { p.ClientId, p.EntityType, p.EntityId }).IsUnique();
+            e.HasIndex(p => new { p.ClientId, p.EntityType, p.IsFavorited });
+        });
+
         modelBuilder.Entity<Category>(e =>
         {
             e.HasIndex(c => new { c.ParentId, c.Name }).IsUnique();

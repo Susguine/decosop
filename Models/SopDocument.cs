@@ -8,7 +8,6 @@ public class SopDocument
     public int CategoryId { get; set; }
     public Category Category { get; set; } = null!;
     public int SortOrder { get; set; }
-    public bool IsFavorited { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

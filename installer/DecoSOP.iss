@@ -12,14 +12,14 @@
 ;   8. Import Documents dir      (only if Import selected, optional)
 ;   9. Scan SOP source dir       (only if Scan selected)
 ;  10. Scan Documents source dir (only if Scan selected)
-;  11. Auto-Update Preference
+;  11. Auto-Update Preference (checks, auto-install, time picker)
 ;  12. Shortcuts (desktop icon)
 ;  13. Ready to Install
 ;  14. Installing...
 ;  15. Finish (open in browser)
 
 #define MyAppName "DecoSOP"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Tyler Sweeney"
 #define MyAppURL "https://github.com/Susguine/decosop"
 #define MyAppExeName "DecoSOP.exe"
@@ -136,7 +136,12 @@ var
   ScanSopDirPage: TInputDirWizardPage;
   ScanDocDirPage: TWizardPage;
   ScanDocDirEdit: TNewEdit;
-  UpdatePage: TInputOptionWizardPage;
+  UpdatePage: TWizardPage;
+  UpdateEnableRadio: TNewRadioButton;
+  UpdateDisableRadio: TNewRadioButton;
+  AutoInstallCheckbox: TNewCheckBox;
+  AutoInstallTimeLabel: TNewStaticText;
+  AutoInstallTimeCombo: TNewComboBox;
 
 // ---- Port helpers ----
 
@@ -254,18 +259,44 @@ end;
 
 function IsAutoUpdateEnabled: Boolean;
 begin
-  if UpdatePage <> nil then
-    Result := UpdatePage.SelectedValueIndex = 0
+  if UpdateEnableRadio <> nil then
+    Result := UpdateEnableRadio.Checked
   else
     Result := True;
+end;
+
+function IsAutoInstallEnabled: Boolean;
+begin
+  if AutoInstallCheckbox <> nil then
+    Result := AutoInstallCheckbox.Checked and IsAutoUpdateEnabled
+  else
+    Result := False;
+end;
+
+function GetAutoInstallTime: String;
+var
+  Idx: Integer;
+begin
+  Result := '02:00';
+  if AutoInstallTimeCombo <> nil then
+  begin
+    Idx := AutoInstallTimeCombo.ItemIndex;
+    if Idx >= 0 then
+      Result := Format('%.2d:00', [Idx]);
+  end;
 end;
 
 function GetUpdateConfigContent(Param: String): String;
 begin
   if IsAutoUpdateEnabled then
-    Result := '{ "enabled": true, "repoOwner": "Susguine", "repoName": "DecoSOP", "checkIntervalHours": 24 }'
+  begin
+    if IsAutoInstallEnabled then
+      Result := '{ "enabled": true, "repoOwner": "Susguine", "repoName": "DecoSOP", "checkIntervalHours": 24, "autoInstall": true, "autoInstallTime": "' + GetAutoInstallTime + '" }'
+    else
+      Result := '{ "enabled": true, "repoOwner": "Susguine", "repoName": "DecoSOP", "checkIntervalHours": 24, "autoInstall": false, "autoInstallTime": "02:00" }';
+  end
   else
-    Result := '{ "enabled": false, "repoOwner": "Susguine", "repoName": "DecoSOP", "checkIntervalHours": 24 }';
+    Result := '{ "enabled": false, "repoOwner": "Susguine", "repoName": "DecoSOP", "checkIntervalHours": 24, "autoInstall": false, "autoInstallTime": "02:00" }';
 end;
 
 // ---- Service detection ----
@@ -384,6 +415,31 @@ begin
   Dir := ScanDocDirEdit.Text;
   if BrowseForFolder('Select the Document source folder:', Dir, False) then
     ScanDocDirEdit.Text := Dir;
+end;
+
+// ---- Update page event handlers ----
+
+procedure UpdateRadioClick(Sender: TObject);
+var
+  Enabled: Boolean;
+begin
+  Enabled := UpdateEnableRadio.Checked;
+  AutoInstallCheckbox.Enabled := Enabled;
+  if not Enabled then
+  begin
+    AutoInstallCheckbox.Checked := False;
+    AutoInstallTimeLabel.Enabled := False;
+    AutoInstallTimeCombo.Enabled := False;
+  end;
+end;
+
+procedure AutoInstallCheckboxClick(Sender: TObject);
+var
+  Enabled: Boolean;
+begin
+  Enabled := AutoInstallCheckbox.Checked;
+  AutoInstallTimeLabel.Enabled := Enabled;
+  AutoInstallTimeCombo.Enabled := Enabled;
 end;
 
 // ---- Wizard pages ----
@@ -571,18 +627,105 @@ begin
   end;
 
   // Page 8: Auto-update preference (after scan dirs)
-  UpdatePage := CreateInputOptionPage(
+  UpdatePage := CreateCustomPage(
     ScanDocDirPage.ID,
     'Automatic Updates',
-    'Choose whether DecoSOP should check for updates.',
-    'When enabled, DecoSOP will periodically check GitHub for new releases' + #13#10 +
-    'and show a notification in the app when an update is available.' + #13#10 + #13#10 +
-    'No data is sent — it only checks the public release page.' + #13#10 +
-    'You can change this setting later via the update-config.json file.',
-    True, False);
-  UpdatePage.Add('Enable automatic update checks (recommended)');
-  UpdatePage.Add('Disable automatic update checks');
-  UpdatePage.SelectedValueIndex := 0;
+    'Choose whether DecoSOP should check for updates.');
+
+  with TNewStaticText.Create(UpdatePage) do
+  begin
+    Parent := UpdatePage.Surface;
+    Caption := 'When enabled, DecoSOP will periodically check GitHub for new releases' + #13#10 +
+               'and show a notification in the app when an update is available.' + #13#10 + #13#10 +
+               'No data is sent — it only checks the public release page.' + #13#10 +
+               'You can change these settings later in the app.';
+    Left := 0;
+    Top := 0;
+    Width := UpdatePage.SurfaceWidth;
+    WordWrap := True;
+    AutoSize := True;
+  end;
+
+  UpdateEnableRadio := TNewRadioButton.Create(UpdatePage);
+  with UpdateEnableRadio do
+  begin
+    Parent := UpdatePage.Surface;
+    Caption := 'Enable automatic update checks (recommended)';
+    Left := 0;
+    Top := 80;
+    Width := UpdatePage.SurfaceWidth;
+    Checked := True;
+    OnClick := @UpdateRadioClick;
+  end;
+
+  UpdateDisableRadio := TNewRadioButton.Create(UpdatePage);
+  with UpdateDisableRadio do
+  begin
+    Parent := UpdatePage.Surface;
+    Caption := 'Disable automatic update checks';
+    Left := 0;
+    Top := 102;
+    Width := UpdatePage.SurfaceWidth;
+    OnClick := @UpdateRadioClick;
+  end;
+
+  AutoInstallCheckbox := TNewCheckBox.Create(UpdatePage);
+  with AutoInstallCheckbox do
+  begin
+    Parent := UpdatePage.Surface;
+    Caption := 'Automatically install updates when available';
+    Left := 20;
+    Top := 136;
+    Width := UpdatePage.SurfaceWidth - 20;
+    Checked := False;
+    OnClick := @AutoInstallCheckboxClick;
+  end;
+
+  AutoInstallTimeLabel := TNewStaticText.Create(UpdatePage);
+  with AutoInstallTimeLabel do
+  begin
+    Parent := UpdatePage.Surface;
+    Caption := 'Install time:';
+    Left := 40;
+    Top := 164;
+    Enabled := False;
+  end;
+
+  AutoInstallTimeCombo := TNewComboBox.Create(UpdatePage);
+  with AutoInstallTimeCombo do
+  begin
+    Parent := UpdatePage.Surface;
+    Left := 110;
+    Top := 160;
+    Width := 120;
+    Style := csDropDownList;
+    Items.Add('12:00 AM');
+    Items.Add('1:00 AM');
+    Items.Add('2:00 AM');
+    Items.Add('3:00 AM');
+    Items.Add('4:00 AM');
+    Items.Add('5:00 AM');
+    Items.Add('6:00 AM');
+    Items.Add('7:00 AM');
+    Items.Add('8:00 AM');
+    Items.Add('9:00 AM');
+    Items.Add('10:00 AM');
+    Items.Add('11:00 AM');
+    Items.Add('12:00 PM');
+    Items.Add('1:00 PM');
+    Items.Add('2:00 PM');
+    Items.Add('3:00 PM');
+    Items.Add('4:00 PM');
+    Items.Add('5:00 PM');
+    Items.Add('6:00 PM');
+    Items.Add('7:00 PM');
+    Items.Add('8:00 PM');
+    Items.Add('9:00 PM');
+    Items.Add('10:00 PM');
+    Items.Add('11:00 PM');
+    ItemIndex := 2;  // Default: 2:00 AM
+    Enabled := False;
+  end;
 end;
 
 // ---- Page visibility + validation ----
