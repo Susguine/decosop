@@ -19,7 +19,7 @@
 ;  15. Finish (open in browser)
 
 #define MyAppName "DecoSOP"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Tyler Sweeney"
 #define MyAppURL "https://github.com/Susguine/decosop"
 #define MyAppExeName "DecoSOP.exe"
@@ -129,10 +129,13 @@ var
   PortPage: TInputQueryWizardPage;
   DatabasePage: TInputOptionWizardPage;
   ImportDbPage: TInputFileWizardPage;
-  ImportSopDirPage: TInputDirWizardPage;
-  ImportDocDirPage: TInputDirWizardPage;
+  ImportSopDirPage: TWizardPage;
+  ImportSopDirEdit: TNewEdit;
+  ImportDocDirPage: TWizardPage;
+  ImportDocDirEdit: TNewEdit;
   ScanSopDirPage: TInputDirWizardPage;
-  ScanDocDirPage: TInputDirWizardPage;
+  ScanDocDirPage: TWizardPage;
+  ScanDocDirEdit: TNewEdit;
   UpdatePage: TInputOptionWizardPage;
 
 // ---- Port helpers ----
@@ -187,8 +190,8 @@ end;
 
 function GetImportSopDirPath(Param: String): String;
 begin
-  if ImportSopDirPage <> nil then
-    Result := ImportSopDirPage.Values[0]
+  if ImportSopDirEdit <> nil then
+    Result := ImportSopDirEdit.Text
   else
     Result := '';
 end;
@@ -200,8 +203,8 @@ end;
 
 function GetImportDocDirPath(Param: String): String;
 begin
-  if ImportDocDirPage <> nil then
-    Result := ImportDocDirPage.Values[0]
+  if ImportDocDirEdit <> nil then
+    Result := ImportDocDirEdit.Text
   else
     Result := '';
 end;
@@ -236,8 +239,8 @@ end;
 
 function GetScanDocDirPath(Param: String): String;
 begin
-  if ScanDocDirPage <> nil then
-    Result := ScanDocDirPage.Values[0]
+  if ScanDocDirEdit <> nil then
+    Result := ScanDocDirEdit.Text
   else
     Result := '';
 end;
@@ -354,6 +357,35 @@ begin
   end;
 end;
 
+// ---- Browse button handlers for optional directory pages ----
+
+procedure BrowseImportSopDir(Sender: TObject);
+var
+  Dir: String;
+begin
+  Dir := ImportSopDirEdit.Text;
+  if BrowseForFolder('Select the SOP uploads folder:', Dir, False) then
+    ImportSopDirEdit.Text := Dir;
+end;
+
+procedure BrowseImportDocDir(Sender: TObject);
+var
+  Dir: String;
+begin
+  Dir := ImportDocDirEdit.Text;
+  if BrowseForFolder('Select the Document uploads folder:', Dir, False) then
+    ImportDocDirEdit.Text := Dir;
+end;
+
+procedure BrowseScanDocDir(Sender: TObject);
+var
+  Dir: String;
+begin
+  Dir := ScanDocDirEdit.Text;
+  if BrowseForFolder('Select the Document source folder:', Dir, False) then
+    ScanDocDirEdit.Text := Dir;
+end;
+
 // ---- Wizard pages ----
 
 procedure InitializeWizard;
@@ -394,28 +426,92 @@ begin
   ImportDbPage.Add('Database file:', '*.db|*.db', '.db');
 
   // Page 4: SOP files directory (after db import — only shown if Import selected)
-  ImportSopDirPage := CreateInputDirPage(
+  ImportSopDirPage := CreateCustomPage(
     ImportDbPage.ID,
     'Import SOP Files',
-    'Optionally import your SOP upload files.',
-    'If you have a previous DecoSOP installation, select the sop-uploads folder' + #13#10 +
-    'to restore your uploaded SOP files.' + #13#10 + #13#10 +
-    'Leave blank to skip this step.',
-    False, '');
-  ImportSopDirPage.Add('SOP uploads folder (e.g. C:\DecoSOP\sop-uploads):');
-  ImportSopDirPage.Values[0] := '';
+    'Optionally import your SOP upload files.');
+  with TNewStaticText.Create(ImportSopDirPage) do
+  begin
+    Parent := ImportSopDirPage.Surface;
+    Caption := 'If you have a previous DecoSOP installation, select the sop-uploads folder' + #13#10 +
+               'to restore your uploaded SOP files.' + #13#10 + #13#10 +
+               'Leave blank to skip this step.';
+    Left := 0;
+    Top := 0;
+    Width := ImportSopDirPage.SurfaceWidth;
+    WordWrap := True;
+    AutoSize := True;
+  end;
+  with TNewStaticText.Create(ImportSopDirPage) do
+  begin
+    Parent := ImportSopDirPage.Surface;
+    Caption := 'SOP uploads folder (e.g. C:\DecoSOP\sop-uploads):';
+    Left := 0;
+    Top := 76;
+  end;
+  ImportSopDirEdit := TNewEdit.Create(ImportSopDirPage);
+  with ImportSopDirEdit do
+  begin
+    Parent := ImportSopDirPage.Surface;
+    Left := 0;
+    Top := 96;
+    Width := ImportSopDirPage.SurfaceWidth - 90;
+    Text := '';
+  end;
+  with TNewButton.Create(ImportSopDirPage) do
+  begin
+    Parent := ImportSopDirPage.Surface;
+    Caption := 'Browse...';
+    Left := ImportSopDirPage.SurfaceWidth - 85;
+    Top := 94;
+    Width := 85;
+    Height := 25;
+    OnClick := @BrowseImportSopDir;
+  end;
 
   // Page 5: Documents directory (after SOP dir — only shown if Import selected)
-  ImportDocDirPage := CreateInputDirPage(
+  ImportDocDirPage := CreateCustomPage(
     ImportSopDirPage.ID,
     'Import Document Files',
-    'Optionally import your Document upload files.',
-    'If you have a previous DecoSOP installation, select the uploads folder' + #13#10 +
-    'to restore your uploaded document files.' + #13#10 + #13#10 +
-    'Leave blank to skip this step.',
-    False, '');
-  ImportDocDirPage.Add('Document uploads folder (e.g. C:\DecoSOP\uploads):');
-  ImportDocDirPage.Values[0] := '';
+    'Optionally import your Document upload files.');
+  with TNewStaticText.Create(ImportDocDirPage) do
+  begin
+    Parent := ImportDocDirPage.Surface;
+    Caption := 'If you have a previous DecoSOP installation, select the uploads folder' + #13#10 +
+               'to restore your uploaded document files.' + #13#10 + #13#10 +
+               'Leave blank to skip this step.';
+    Left := 0;
+    Top := 0;
+    Width := ImportDocDirPage.SurfaceWidth;
+    WordWrap := True;
+    AutoSize := True;
+  end;
+  with TNewStaticText.Create(ImportDocDirPage) do
+  begin
+    Parent := ImportDocDirPage.Surface;
+    Caption := 'Document uploads folder (e.g. C:\DecoSOP\uploads):';
+    Left := 0;
+    Top := 76;
+  end;
+  ImportDocDirEdit := TNewEdit.Create(ImportDocDirPage);
+  with ImportDocDirEdit do
+  begin
+    Parent := ImportDocDirPage.Surface;
+    Left := 0;
+    Top := 96;
+    Width := ImportDocDirPage.SurfaceWidth - 90;
+    Text := '';
+  end;
+  with TNewButton.Create(ImportDocDirPage) do
+  begin
+    Parent := ImportDocDirPage.Surface;
+    Caption := 'Browse...';
+    Left := ImportDocDirPage.SurfaceWidth - 85;
+    Top := 94;
+    Width := 85;
+    Height := 25;
+    OnClick := @BrowseImportDocDir;
+  end;
 
   // Page 6: Scan SOP source dir (after import dirs — only shown if Scan selected)
   ScanSopDirPage := CreateInputDirPage(
@@ -431,16 +527,48 @@ begin
   ScanSopDirPage.Values[0] := '';
 
   // Page 7: Scan Documents source dir (after scan SOP — only shown if Scan selected)
-  ScanDocDirPage := CreateInputDirPage(
+  ScanDocDirPage := CreateCustomPage(
     ScanSopDirPage.ID,
     'Scan Document Files',
-    'Optionally select a folder containing your document files.',
-    'DecoSOP will scan the selected folder and its subfolders.' + #13#10 +
-    'Subfolders become categories, and matching files are imported as Documents.' + #13#10 + #13#10 +
-    'Leave blank to skip document scanning.',
-    False, '');
-  ScanDocDirPage.Add('Document source folder (e.g. S:\Documents):');
-  ScanDocDirPage.Values[0] := '';
+    'Optionally select a folder containing your document files.');
+  with TNewStaticText.Create(ScanDocDirPage) do
+  begin
+    Parent := ScanDocDirPage.Surface;
+    Caption := 'DecoSOP will scan the selected folder and its subfolders.' + #13#10 +
+               'Subfolders become categories, and matching files are imported as Documents.' + #13#10 + #13#10 +
+               'Leave blank to skip document scanning.';
+    Left := 0;
+    Top := 0;
+    Width := ScanDocDirPage.SurfaceWidth;
+    WordWrap := True;
+    AutoSize := True;
+  end;
+  with TNewStaticText.Create(ScanDocDirPage) do
+  begin
+    Parent := ScanDocDirPage.Surface;
+    Caption := 'Document source folder (e.g. S:\Documents):';
+    Left := 0;
+    Top := 76;
+  end;
+  ScanDocDirEdit := TNewEdit.Create(ScanDocDirPage);
+  with ScanDocDirEdit do
+  begin
+    Parent := ScanDocDirPage.Surface;
+    Left := 0;
+    Top := 96;
+    Width := ScanDocDirPage.SurfaceWidth - 90;
+    Text := '';
+  end;
+  with TNewButton.Create(ScanDocDirPage) do
+  begin
+    Parent := ScanDocDirPage.Surface;
+    Caption := 'Browse...';
+    Left := ScanDocDirPage.SurfaceWidth - 85;
+    Top := 94;
+    Width := 85;
+    Height := 25;
+    OnClick := @BrowseScanDocDir;
+  end;
 
   // Page 8: Auto-update preference (after scan dirs)
   UpdatePage := CreateInputOptionPage(
@@ -523,6 +651,26 @@ begin
     end;
   end;
 
+  // Validate optional import SOP dir (non-empty must exist)
+  if (ImportSopDirPage <> nil) and (CurPageID = ImportSopDirPage.ID) then
+  begin
+    if (ImportSopDirEdit.Text <> '') and not DirExists(ImportSopDirEdit.Text) then
+    begin
+      MsgBox('The selected folder does not exist. Please choose a valid directory or leave blank to skip.', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+
+  // Validate optional import doc dir (non-empty must exist)
+  if (ImportDocDirPage <> nil) and (CurPageID = ImportDocDirPage.ID) then
+  begin
+    if (ImportDocDirEdit.Text <> '') and not DirExists(ImportDocDirEdit.Text) then
+    begin
+      MsgBox('The selected folder does not exist. Please choose a valid directory or leave blank to skip.', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+
   // Validate scan SOP directory (required when scan option selected)
   if (ScanSopDirPage <> nil) and (CurPageID = ScanSopDirPage.ID) then
   begin
@@ -534,6 +682,16 @@ begin
     else if not DirExists(ScanSopDirPage.Values[0]) then
     begin
       MsgBox('The selected folder does not exist. Please choose a valid directory.', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+
+  // Validate optional scan doc dir (non-empty must exist)
+  if (ScanDocDirPage <> nil) and (CurPageID = ScanDocDirPage.ID) then
+  begin
+    if (ScanDocDirEdit.Text <> '') and not DirExists(ScanDocDirEdit.Text) then
+    begin
+      MsgBox('The selected folder does not exist. Please choose a valid directory or leave blank to skip.', mbError, MB_OK);
       Result := False;
     end;
   end;
