@@ -25,7 +25,7 @@ public class DocumentService
 
     public static string GetUploadDirectory()
     {
-        var dir = Path.Combine(DataDirectory, "uploads");
+        var dir = Path.Combine(DataDirectory, "doc-uploads");
         Directory.CreateDirectory(dir);
         return dir;
     }
@@ -193,7 +193,20 @@ public class DocumentService
     // --- Helpers ---
 
     public string GetFilePath(OfficeDocument doc)
-        => Path.Combine(GetUploadDirectory(), doc.StoredFileName);
+    {
+        var dir = GetUploadDirectory();
+        var path = Path.Combine(dir, doc.StoredFileName);
+        if (File.Exists(path)) return path;
+
+        // Fallback: strip "{id}_" prefix (handles import mismatch)
+        var idx = doc.StoredFileName.IndexOf('_');
+        if (idx > 0)
+        {
+            var fallback = Path.Combine(dir, doc.StoredFileName[(idx + 1)..]);
+            if (File.Exists(fallback)) return fallback;
+        }
+        return path;
+    }
 
     public static string FormatFileSize(long bytes)
     {

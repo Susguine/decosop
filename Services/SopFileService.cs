@@ -193,7 +193,20 @@ public class SopFileService
     // --- Helpers ---
 
     public string GetFilePath(SopFile doc)
-        => Path.Combine(GetUploadDirectory(), doc.StoredFileName);
+    {
+        var dir = GetUploadDirectory();
+        var path = Path.Combine(dir, doc.StoredFileName);
+        if (File.Exists(path)) return path;
+
+        // Fallback: strip "{id}_" prefix (handles import mismatch)
+        var idx = doc.StoredFileName.IndexOf('_');
+        if (idx > 0)
+        {
+            var fallback = Path.Combine(dir, doc.StoredFileName[(idx + 1)..]);
+            if (File.Exists(fallback)) return fallback;
+        }
+        return path; // Return original path even if missing (caller handles not-found)
+    }
 
     public static string FormatFileSize(long bytes)
     {

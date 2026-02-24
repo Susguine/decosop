@@ -16,11 +16,14 @@ public static class PdfConversionService
     private static readonly ConcurrentDictionary<string, Task<string?>> ActiveConversions = new();
 
     private static string? _sofficePath;
+    private static string? _lastError;
+
+    public static string? LastError => _lastError;
 
     public static bool CanConvert(string fileName)
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        return ConvertibleExtensions.Contains(ext);
+        return ConvertibleExtensions.Contains(ext) && IsLibreOfficeAvailable();
     }
 
     /// <summary>
@@ -30,7 +33,9 @@ public static class PdfConversionService
     public static async Task<string?> GetOrCreatePdfAsync(string sourceFilePath, string storedFileName)
     {
         var previewDir = GetPreviewDirectory();
-        var pdfFileName = Path.ChangeExtension(storedFileName, ".pdf");
+        // Flatten subdirectory separators so all previews go in a single flat directory
+        var flatName = storedFileName.Replace('/', '_').Replace('\\', '_');
+        var pdfFileName = Path.ChangeExtension(flatName, ".pdf");
         var pdfPath = Path.Combine(previewDir, pdfFileName);
 
         // Return cached PDF if it exists and is newer than the source
@@ -59,10 +64,19 @@ public static class PdfConversionService
     {
         var soffice = FindSoffice();
         if (soffice is null)
+        {
+            _lastError = "LibreOffice not found on this system";
             return null;
+        }
 
         try
         {
+            if (!File.Exists(sourceFilePath))
+            {
+                _lastError = $"Source file not found: {sourceFilePath}";
+                return null;
+            }
+
             // LibreOffice needs a unique user profile when running multiple instances
             var profileDir = Path.Combine(Path.GetTempPath(), $"libreoffice_convert_{Guid.NewGuid():N}");
 
@@ -82,7 +96,13 @@ public static class PdfConversionService
 
             using var process = Process.Start(psi);
             if (process is null)
+            {
+                _lastError = "Failed to start LibreOffice process";
                 return null;
+            }
+
+            var stdout = await process.StandardOutput.ReadToEndAsync();
+            var stderr = await process.StandardError.ReadToEndAsync();
 
             // Wait up to 60 seconds for conversion
             var completed = await WaitForExitAsync(process, TimeSpan.FromSeconds(60));
@@ -92,12 +112,18 @@ public static class PdfConversionService
 
             if (!completed)
             {
+                _lastError = "LibreOffice conversion timed out after 60 seconds";
                 try { process.Kill(); } catch { }
                 return null;
             }
 
-            // LibreOffice names the output based on the source filename
-            // The source file is stored as "123_filename.doc" and output becomes "123_filename.pdf"
+            if (process.ExitCode != 0)
+            {
+                _lastError = $"LibreOffice exited with code {process.ExitCode}. stderr: {stderr}";
+                return null;
+            }
+
+            // LibreOffice names the output based on the source filename's basename
             var sourceNameWithoutExt = Path.GetFileNameWithoutExtension(sourceFilePath);
             var generatedPdfPath = Path.Combine(previewDir, sourceNameWithoutExt + ".pdf");
 
@@ -111,10 +137,15 @@ public static class PdfConversionService
             }
 
             // Check if the expected path exists (in case names matched)
-            return File.Exists(expectedPdfPath) ? expectedPdfPath : null;
+            if (File.Exists(expectedPdfPath))
+                return expectedPdfPath;
+
+            _lastError = $"LibreOffice completed but PDF not found. stdout: {stdout}. Expected: {expectedPdfPath}";
+            return null;
         }
-        catch
+        catch (Exception ex)
         {
+            _lastError = $"Exception during conversion: {ex.Message}";
             return null;
         }
     }
@@ -190,7 +221,7 @@ public static class PdfConversionService
 
     private static string GetPreviewDirectory()
     {
-        var dir = Path.Combine(DocumentService.DataDirectory, "uploads", "previews");
+        var dir = Path.Combine(DocumentService.DataDirectory, "doc-uploads", "previews");
         Directory.CreateDirectory(dir);
         return dir;
     }

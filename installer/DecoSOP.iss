@@ -13,16 +13,20 @@
 ;   9. Scan SOP source dir       (only if Scan selected)
 ;  10. Scan Documents source dir (only if Scan selected)
 ;  11. Auto-Update Preference (checks, auto-install, time picker)
-;  12. Shortcuts (desktop icon)
-;  13. Ready to Install
-;  14. Installing...
-;  15. Finish (open in browser)
+;  12. LibreOffice (optional download + install for Office doc previews)
+;  13. Shortcuts (desktop icon)
+;  14. Ready to Install
+;  15. Installing...
+;  16. Finish (open in browser)
 
 #define MyAppName "DecoSOP"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Tyler Sweeney"
 #define MyAppURL "https://github.com/Susguine/decosop"
 #define MyAppExeName "DecoSOP.exe"
+#define LibreOfficeVersion "25.8.5"
+#define LibreOfficeFileName "LibreOffice_25.8.5_Win_x86-64.msi"
+#define LibreOfficeURL "https://download.documentfoundation.org/libreoffice/stable/25.8.5/win/x86_64/LibreOffice_25.8.5_Win_x86-64.msi"
 
 [Setup]
 AppId={{D3C0-50F1-4A2B-B8E9-DecoSOP-1000}}
@@ -51,10 +55,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 ; Published app files — excludes DB and upload dirs (user data)
-Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "decosop.db,uploads,sop-uploads"
+Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "decosop.db,doc-uploads,sop-uploads"
 
 [Dirs]
-Name: "{app}\uploads"
+Name: "{app}\doc-uploads"
 Name: "{app}\sop-uploads"
 
 [Icons]
@@ -90,7 +94,7 @@ Filename: "cmd.exe"; Parameters: "/c copy /y ""{code:GetImportDbPath}"" ""{app}\
 Filename: "robocopy.exe"; Parameters: """{code:GetImportSopDirPath}"" ""{app}\sop-uploads"" /E /NFL /NDL /NJH /NJS"; Flags: runhidden; Check: ShouldImportSopDir; StatusMsg: "Importing SOP files..."
 
 ; Copy Document upload files if directory was selected
-Filename: "robocopy.exe"; Parameters: """{code:GetImportDocDirPath}"" ""{app}\uploads"" /E /NFL /NDL /NJH /NJS"; Flags: runhidden; Check: ShouldImportDocDir; StatusMsg: "Importing document files..."
+Filename: "robocopy.exe"; Parameters: """{code:GetImportDocDirPath}"" ""{app}\doc-uploads"" /E /NFL /NDL /NJH /NJS"; Flags: runhidden; Check: ShouldImportDocDir; StatusMsg: "Importing document files..."
 
 ; Add firewall rule
 Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""DecoSOP"""; Flags: runhidden; StatusMsg: "Updating firewall rules..."
@@ -99,11 +103,7 @@ Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""DecoSOP
 ; Seed demo data if selected
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--seed-demo"; Flags: runhidden waituntilterminated; StatusMsg: "Loading demo data..."; Check: ShouldSeedDemo
 
-; Scan SOP files from directory if selected
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--import-sops ""{code:GetScanSopDirPath}"""; Flags: runhidden waituntilterminated; StatusMsg: "Scanning and importing SOP files (this may take a while)..."; Check: ShouldScanSops
-
-; Scan Document files from directory if selected
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--import-docs ""{code:GetScanDocDirPath}"""; Flags: runhidden waituntilterminated; StatusMsg: "Scanning and importing document files (this may take a while)..."; Check: ShouldScanDocs
+; NOTE: SOP/Doc scan imports are now handled in CurStepChanged with progress polling
 
 ; Start the service
 Filename: "sc.exe"; Parameters: "start DecoSOP"; Flags: runhidden waituntilterminated; StatusMsg: "Starting DecoSOP..."
@@ -112,10 +112,10 @@ Filename: "sc.exe"; Parameters: "start DecoSOP"; Flags: runhidden waituntiltermi
 Filename: "http://localhost:{code:GetPort}"; Flags: postinstall shellexec nowait unchecked; Description: "Open DecoSOP in browser"
 
 [UninstallRun]
-Filename: "sc.exe"; Parameters: "stop DecoSOP"; Flags: runhidden; RunOnceId: "StopService"
-Filename: "cmd.exe"; Parameters: "/c timeout /t 3 /nobreak >nul"; Flags: runhidden; RunOnceId: "WaitStop"
-Filename: "sc.exe"; Parameters: "delete DecoSOP"; Flags: runhidden; RunOnceId: "DeleteService"
-Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""DecoSOP"""; Flags: runhidden; RunOnceId: "RemoveFirewall"
+Filename: "sc.exe"; Parameters: "stop DecoSOP"; Flags: runhidden waituntilterminated
+Filename: "cmd.exe"; Parameters: "/c timeout /t 5 /nobreak >nul"; Flags: runhidden waituntilterminated
+Filename: "sc.exe"; Parameters: "delete DecoSOP"; Flags: runhidden waituntilterminated
+Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""DecoSOP"""; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\wwwroot"
@@ -143,6 +143,10 @@ var
   AutoInstallTimeLabel: TNewStaticText;
   AutoInstallTimeCombo: TNewComboBox;
   IsUpgradeInstall: Boolean;
+  LibreOfficePage: TWizardPage;
+  LibreOfficeCheckbox: TNewCheckBox;
+  LibreOfficeStatusLabel: TNewStaticText;
+  LibreOfficeDetected: Boolean;
 
 // ---- Port helpers ----
 
@@ -308,6 +312,35 @@ var
 begin
   Exec('sc.exe', 'query DecoSOP', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := (ResultCode = 0);
+end;
+
+// ---- LibreOffice detection ----
+
+function IsLibreOfficeInstalled: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{commonpf}\LibreOffice\program\soffice.exe'))
+         or FileExists(ExpandConstant('{commonpf32}\LibreOffice\program\soffice.exe'));
+end;
+
+function ShouldInstallLibreOffice: Boolean;
+begin
+  Result := (LibreOfficeCheckbox <> nil) and LibreOfficeCheckbox.Checked and (not LibreOfficeDetected);
+end;
+
+// ---- LibreOffice download progress callback ----
+
+function LibreOfficeDownloadProgress(const Url, FileName: string; const Progress, ProgressMax: Int64): Boolean;
+var
+  Pct: Integer;
+begin
+  if ProgressMax > 0 then
+  begin
+    Pct := (Progress * 100) div ProgressMax;
+    WizardForm.StatusLabel.Caption := Format('Downloading LibreOffice... %d%%', [Pct]);
+  end
+  else
+    WizardForm.StatusLabel.Caption := 'Downloading LibreOffice...';
+  Result := True;
 end;
 
 // ---- Existing install detection ----
@@ -535,7 +568,7 @@ begin
   with TNewStaticText.Create(ImportDocDirPage) do
   begin
     Parent := ImportDocDirPage.Surface;
-    Caption := 'If you have a previous DecoSOP installation, select the uploads folder' + #13#10 +
+    Caption := 'If you have a previous DecoSOP installation, select the doc-uploads folder' + #13#10 +
                'to restore your uploaded document files.' + #13#10 + #13#10 +
                'Leave blank to skip this step.';
     Left := 0;
@@ -547,7 +580,7 @@ begin
   with TNewStaticText.Create(ImportDocDirPage) do
   begin
     Parent := ImportDocDirPage.Surface;
-    Caption := 'Document uploads folder (e.g. C:\DecoSOP\uploads):';
+    Caption := 'Document uploads folder (e.g. C:\DecoSOP\doc-uploads):';
     Left := 0;
     Top := 76;
   end;
@@ -728,19 +761,175 @@ begin
     ItemIndex := 2;  // Default: 2:00 AM
     Enabled := False;
   end;
+
+  // Page 9: LibreOffice (after auto-update — optional download for Office doc previews)
+  LibreOfficeDetected := IsLibreOfficeInstalled;
+
+  LibreOfficePage := CreateCustomPage(
+    UpdatePage.ID,
+    'Office Document Previews',
+    'LibreOffice enables inline previews of Word, Excel, and PowerPoint files.');
+
+  if LibreOfficeDetected then
+  begin
+    with TNewStaticText.Create(LibreOfficePage) do
+    begin
+      Parent := LibreOfficePage.Surface;
+      Caption := 'LibreOffice is already installed on this computer.' + #13#10 + #13#10 +
+                 'Office documents (Word, Excel, PowerPoint) will be converted to PDF' + #13#10 +
+                 'automatically for inline preview in the browser.' + #13#10 + #13#10 +
+                 'No additional action is needed.';
+      Left := 0;
+      Top := 0;
+      Width := LibreOfficePage.SurfaceWidth;
+      WordWrap := True;
+      AutoSize := True;
+    end;
+  end
+  else
+  begin
+    with TNewStaticText.Create(LibreOfficePage) do
+    begin
+      Parent := LibreOfficePage.Surface;
+      Caption := 'DecoSOP can show inline previews of Office documents (Word, Excel,' + #13#10 +
+                 'PowerPoint) by converting them to PDF using LibreOffice.' + #13#10 + #13#10 +
+                 'Without LibreOffice, Office documents will still be available for' + #13#10 +
+                 'download but cannot be previewed in the browser.' + #13#10 + #13#10 +
+                 'LibreOffice is free and open-source (approx. 350 MB download).';
+      Left := 0;
+      Top := 0;
+      Width := LibreOfficePage.SurfaceWidth;
+      WordWrap := True;
+      AutoSize := True;
+    end;
+
+    LibreOfficeCheckbox := TNewCheckBox.Create(LibreOfficePage);
+    with LibreOfficeCheckbox do
+    begin
+      Parent := LibreOfficePage.Surface;
+      Caption := 'Download and install LibreOffice (recommended)';
+      Left := 0;
+      Top := 120;
+      Width := LibreOfficePage.SurfaceWidth;
+      Checked := True;
+    end;
+
+    LibreOfficeStatusLabel := TNewStaticText.Create(LibreOfficePage);
+    with LibreOfficeStatusLabel do
+    begin
+      Parent := LibreOfficePage.Surface;
+      Caption := '';
+      Left := 0;
+      Top := 150;
+      Width := LibreOfficePage.SurfaceWidth;
+      WordWrap := True;
+      AutoSize := True;
+    end;
+  end;
+end;
+
+// ---- Import with real-time progress polling ----
+
+procedure RunImportWithProgress(ExeParams, InitialMsg: String);
+var
+  StatusFile: String;
+  StatusText: AnsiString;
+  ResultCode: Integer;
+  ElapsedMs: Integer;
+begin
+  StatusFile := ExpandConstant('{app}\import-status.txt');
+  DeleteFile(StatusFile);
+
+  WizardForm.StatusLabel.Caption := InitialMsg;
+  WizardForm.FilenameLabel.Caption := '';
+  WizardForm.Refresh;
+
+  // Launch import process in background
+  Exec(ExpandConstant('{app}\{#MyAppExeName}'), ExeParams, '', SW_HIDE, ewNoWait, ResultCode);
+
+  // Poll status file until COMPLETE or timeout (60 min)
+  ElapsedMs := 0;
+  while ElapsedMs < 3600000 do
+  begin
+    Sleep(500);
+    ElapsedMs := ElapsedMs + 500;
+
+    if LoadStringFromFile(StatusFile, StatusText) then
+    begin
+      if Pos('COMPLETE', String(StatusText)) > 0 then
+        Break;
+      if Length(StatusText) > 0 then
+      begin
+        WizardForm.StatusLabel.Caption := InitialMsg + ' (' + String(StatusText) + ')';
+        WizardForm.Refresh;
+      end;
+    end;
+  end;
+
+  DeleteFile(StatusFile);
+end;
+
+// ---- Post-install: imports + LibreOffice ----
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  MsiPath: String;
+  ResultCode: Integer;
+  DownloadSize: Int64;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    // Run scan imports with progress polling
+    if ShouldScanSops then
+      RunImportWithProgress('--import-sops "' + GetScanSopDirPath('') + '"', 'Scanning and importing SOP files...');
+
+    if ShouldScanDocs then
+      RunImportWithProgress('--import-docs "' + GetScanDocDirPath('') + '"', 'Scanning and importing document files...');
+
+    // Download and install LibreOffice if selected
+    if ShouldInstallLibreOffice then
+    begin
+      WizardForm.StatusLabel.Caption := 'Downloading LibreOffice (this may take several minutes)...';
+      WizardForm.FilenameLabel.Caption := '{#LibreOfficeURL}';
+
+      try
+        DownloadSize := DownloadTemporaryFile('{#LibreOfficeURL}', '{#LibreOfficeFileName}', '', @LibreOfficeDownloadProgress);
+        if DownloadSize = 0 then
+        begin
+          MsgBox('LibreOffice download failed. You can install LibreOffice manually later from https://www.libreoffice.org', mbError, MB_OK);
+          Exit;
+        end;
+      except
+        MsgBox('LibreOffice download failed. You can install LibreOffice manually later from https://www.libreoffice.org', mbError, MB_OK);
+        Exit;
+      end;
+
+      MsiPath := ExpandConstant('{tmp}\{#LibreOfficeFileName}');
+      WizardForm.StatusLabel.Caption := 'Installing LibreOffice (this may take a few minutes)...';
+      WizardForm.FilenameLabel.Caption := MsiPath;
+
+      if not Exec('msiexec.exe', '/i "' + MsiPath + '" /qn /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      begin
+        MsgBox('LibreOffice installation failed. You can install it manually later from https://www.libreoffice.org', mbError, MB_OK);
+      end
+      else if ResultCode <> 0 then
+      begin
+        MsgBox('LibreOffice installation returned an error (code ' + IntToStr(ResultCode) + '). You can install it manually later from https://www.libreoffice.org', mbError, MB_OK);
+      end;
+
+      DeleteFile(MsiPath);
+    end;
+  end;
 end;
 
 // ---- Page visibility + validation ----
 
 function ShouldSkipPage(PageID: Integer): Boolean;
-var
-  DbPath: String;
 begin
   Result := False;
 
   // On upgrade, skip database setup and all import/scan pages (DB already exists)
-  DbPath := AddBackslash(WizardDirValue) + 'decosop.db';
-  if IsUpgradeInstall or FileExists(DbPath) then
+  if IsUpgradeInstall then
   begin
     if (DatabasePage <> nil) and (PageID = DatabasePage.ID) then
       Result := True;
@@ -773,6 +962,10 @@ begin
 
   if (ScanDocDirPage <> nil) and (PageID = ScanDocDirPage.ID) then
     Result := not ShouldScanFiles;
+
+  // Skip LibreOffice page if already installed
+  if (LibreOfficePage <> nil) and (PageID = LibreOfficePage.ID) then
+    Result := LibreOfficeDetected;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;

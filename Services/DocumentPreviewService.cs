@@ -28,6 +28,26 @@ public static class DocumentPreviewService
     }
 
     /// <summary>
+    /// Extract just the body HTML content from a file (no wrapping HTML document).
+    /// Returns null if the file type is not supported for HTML extraction.
+    /// </summary>
+    public static string? ExtractBodyHtml(string filePath)
+    {
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        try
+        {
+            return ext switch
+            {
+                ".docx" => ConvertDocxToHtml(filePath),
+                ".xlsx" => ConvertXlsxToHtml(filePath),
+                ".doc" => ConvertDocToHtml(filePath),
+                _ => null
+            };
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
     /// Convert a file to an HTML preview. Returns a full HTML document string.
     /// </summary>
     public static string GenerateHtmlPreview(string filePath, string title)

@@ -382,7 +382,7 @@ using (var scope = app.Services.CreateScope())
     if (importDocsIdx >= 0 && importDocsIdx + 1 < args.Length)
     {
         var docSourceDir = args[importDocsIdx + 1];
-        var docUploadsDir = Path.Combine(dataDir, "uploads");
+        var docUploadsDir = Path.Combine(dataDir, "doc-uploads");
         FileImportService.ImportDocumentFiles(dbPath, docSourceDir, docUploadsDir);
     }
 
@@ -399,12 +399,39 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseStatusCodePages(async context =>
+{
+    // Don't re-execute for API routes — just return the raw status code
+    if (context.HttpContext.Request.Path.StartsWithSegments("/api"))
+        return;
+
+    context.HttpContext.Response.Redirect("/not-found");
+});
 app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// Helper: resolve stored filename to actual file on disk.
+// Tries the exact StoredFileName first; if not found, strips the "{id}_" prefix
+// (handles cases where files were imported without the prefix).
+string? ResolveFilePath(string uploadDir, string? storedFileName)
+{
+    if (string.IsNullOrEmpty(storedFileName)) return null;
+    var path = Path.Combine(uploadDir, storedFileName);
+    if (File.Exists(path)) return path;
+
+    // Strip "{id}_" prefix and try again
+    var underscoreIdx = storedFileName.IndexOf('_');
+    if (underscoreIdx > 0)
+    {
+        var unprefixed = storedFileName[(underscoreIdx + 1)..];
+        var fallbackPath = Path.Combine(uploadDir, unprefixed);
+        if (File.Exists(fallbackPath)) return fallbackPath;
+    }
+    return null;
+}
 
 // File download endpoint for office documents
 app.MapGet("/api/documents/{id:int}/download", async (int id, AppDbContext db) =>
@@ -412,8 +439,8 @@ app.MapGet("/api/documents/{id:int}/download", async (int id, AppDbContext db) =
     var doc = await db.OfficeDocuments.FindAsync(id);
     if (doc is null) return Results.NotFound();
 
-    var filePath = Path.Combine(DocumentService.GetUploadDirectory(), doc.StoredFileName);
-    if (!File.Exists(filePath)) return Results.NotFound();
+    var filePath = ResolveFilePath(DocumentService.GetUploadDirectory(), doc.StoredFileName);
+    if (filePath is null) return Results.NotFound();
 
     return Results.File(filePath, doc.ContentType, doc.FileName);
 });
@@ -424,8 +451,8 @@ app.MapGet("/api/documents/{id:int}/preview", async (int id, AppDbContext db) =>
     var doc = await db.OfficeDocuments.FindAsync(id);
     if (doc is null) return Results.NotFound();
 
-    var filePath = Path.Combine(DocumentService.GetUploadDirectory(), doc.StoredFileName);
-    if (!File.Exists(filePath)) return Results.NotFound();
+    var filePath = ResolveFilePath(DocumentService.GetUploadDirectory(), doc.StoredFileName);
+    if (filePath is null) return Results.NotFound();
 
     return Results.File(filePath, doc.ContentType, enableRangeProcessing: true);
 });
@@ -436,8 +463,8 @@ app.MapGet("/api/documents/{id:int}/preview-html", async (int id, AppDbContext d
     var doc = await db.OfficeDocuments.FindAsync(id);
     if (doc is null) return Results.NotFound();
 
-    var filePath = Path.Combine(DocumentService.GetUploadDirectory(), doc.StoredFileName);
-    if (!File.Exists(filePath)) return Results.NotFound();
+    var filePath = ResolveFilePath(DocumentService.GetUploadDirectory(), doc.StoredFileName);
+    if (filePath is null) return Results.NotFound();
 
     var html = DocumentPreviewService.GenerateHtmlPreview(filePath, doc.Title);
     return Results.Content(html, "text/html");
@@ -449,12 +476,12 @@ app.MapGet("/api/documents/{id:int}/preview-pdf", async (int id, AppDbContext db
     var doc = await db.OfficeDocuments.FindAsync(id);
     if (doc is null) return Results.NotFound();
 
-    var filePath = Path.Combine(DocumentService.GetUploadDirectory(), doc.StoredFileName);
-    if (!File.Exists(filePath)) return Results.NotFound();
+    var filePath = ResolveFilePath(DocumentService.GetUploadDirectory(), doc.StoredFileName);
+    if (filePath is null) return Results.NotFound();
 
     var pdfPath = await PdfConversionService.GetOrCreatePdfAsync(filePath, doc.StoredFileName);
     if (pdfPath is null)
-        return Results.Problem("PDF conversion failed. Ensure LibreOffice is installed.");
+        return Results.Problem($"PDF conversion failed: {PdfConversionService.LastError ?? "Unknown error"}");
 
     return Results.File(pdfPath, "application/pdf", enableRangeProcessing: true);
 });
@@ -465,8 +492,8 @@ app.MapGet("/api/sops/{id:int}/download", async (int id, AppDbContext db) =>
     var doc = await db.SopFiles.FindAsync(id);
     if (doc is null) return Results.NotFound();
 
-    var filePath = Path.Combine(SopFileService.GetUploadDirectory(), doc.StoredFileName);
-    if (!File.Exists(filePath)) return Results.NotFound();
+    var filePath = ResolveFilePath(SopFileService.GetUploadDirectory(), doc.StoredFileName);
+    if (filePath is null) return Results.NotFound();
 
     return Results.File(filePath, doc.ContentType, doc.FileName);
 });
@@ -476,8 +503,8 @@ app.MapGet("/api/sops/{id:int}/preview", async (int id, AppDbContext db) =>
     var doc = await db.SopFiles.FindAsync(id);
     if (doc is null) return Results.NotFound();
 
-    var filePath = Path.Combine(SopFileService.GetUploadDirectory(), doc.StoredFileName);
-    if (!File.Exists(filePath)) return Results.NotFound();
+    var filePath = ResolveFilePath(SopFileService.GetUploadDirectory(), doc.StoredFileName);
+    if (filePath is null) return Results.NotFound();
 
     return Results.File(filePath, doc.ContentType, enableRangeProcessing: true);
 });
@@ -487,8 +514,8 @@ app.MapGet("/api/sops/{id:int}/preview-html", async (int id, AppDbContext db) =>
     var doc = await db.SopFiles.FindAsync(id);
     if (doc is null) return Results.NotFound();
 
-    var filePath = Path.Combine(SopFileService.GetUploadDirectory(), doc.StoredFileName);
-    if (!File.Exists(filePath)) return Results.NotFound();
+    var filePath = ResolveFilePath(SopFileService.GetUploadDirectory(), doc.StoredFileName);
+    if (filePath is null) return Results.NotFound();
 
     var html = DocumentPreviewService.GenerateHtmlPreview(filePath, doc.Title);
     return Results.Content(html, "text/html");
@@ -499,12 +526,12 @@ app.MapGet("/api/sops/{id:int}/preview-pdf", async (int id, AppDbContext db) =>
     var doc = await db.SopFiles.FindAsync(id);
     if (doc is null) return Results.NotFound();
 
-    var filePath = Path.Combine(SopFileService.GetUploadDirectory(), doc.StoredFileName);
-    if (!File.Exists(filePath)) return Results.NotFound();
+    var filePath = ResolveFilePath(SopFileService.GetUploadDirectory(), doc.StoredFileName);
+    if (filePath is null) return Results.NotFound();
 
     var pdfPath = await PdfConversionService.GetOrCreatePdfAsync(filePath, doc.StoredFileName);
     if (pdfPath is null)
-        return Results.Problem("PDF conversion failed. Ensure LibreOffice is installed.");
+        return Results.Problem($"PDF conversion failed: {PdfConversionService.LastError ?? "Unknown error"}");
 
     return Results.File(pdfPath, "application/pdf", enableRangeProcessing: true);
 });
