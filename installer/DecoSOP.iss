@@ -1045,13 +1045,27 @@ begin
     end;
   end;
 
-  // Validate optional scan doc dir (non-empty must exist)
+  // Validate optional scan doc dir (non-empty must exist, must not overlap with SOP dir)
   if (ScanDocDirPage <> nil) and (CurPageID = ScanDocDirPage.ID) then
   begin
-    if (ScanDocDirEdit.Text <> '') and not DirExists(ScanDocDirEdit.Text) then
+    if (ScanDocDirEdit.Text <> '') then
     begin
-      MsgBox('The selected folder does not exist. Please choose a valid directory or leave blank to skip.', mbError, MB_OK);
-      Result := False;
+      if not DirExists(ScanDocDirEdit.Text) then
+      begin
+        MsgBox('The selected folder does not exist. Please choose a valid directory or leave blank to skip.', mbError, MB_OK);
+        Result := False;
+      end
+      else if (CompareText(ScanDocDirEdit.Text, GetScanSopDirPath('')) = 0) then
+      begin
+        MsgBox('The Document folder cannot be the same as the SOP folder. Please choose a different directory or leave blank to skip.', mbError, MB_OK);
+        Result := False;
+      end
+      else if (CompareText(Copy(ScanDocDirEdit.Text, 1, Length(GetScanSopDirPath(''))), GetScanSopDirPath('')) = 0) or
+              (CompareText(Copy(GetScanSopDirPath(''), 1, Length(ScanDocDirEdit.Text)), ScanDocDirEdit.Text) = 0) then
+      begin
+        MsgBox('The Document folder overlaps with the SOP folder (one is inside the other). Please choose a non-overlapping directory or leave blank to skip.', mbError, MB_OK);
+        Result := False;
+      end;
     end;
   end;
 end;
